@@ -106,3 +106,11 @@ it was answered. `openSealed(secretKey, item, use, { enc, ct })` gives the secre
 Switch installs it from a git URL or package name: `extensions_install`, or Extensions in the desktop. A
 monorepo folder is installed at a commit from the core machine's `~/.switch/extensions.json`
 (`{ "source": "github:<owner>/<repo>#<commit>", "path": "<folder>" }`), packed from that folder.
+
+## Session connections
+
+A session need declares `session: { signIn: "sign_in", status: "connection_status" }`. Both tools take
+`{ account? }`. `signIn` prepares the exact browser session and returns `{ view: { app, name, input } }`
+for a widget, or `{ url }` for a client link. `status` only reads the real session and returns
+`{ accounts: [{ account }] }`, empty when signed out. Switch verifies it before closing connection asks.
+Never infer a signed-in account from a checkout that permits guests.

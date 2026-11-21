@@ -17,6 +17,8 @@ export interface Need {
    * (an API key, a bot token), or a session the extension holds itself (a signed-in browser).
    */
   readonly kind?: "oauth" | "key" | "session"
+  /** Session tools: signIn prepares the user's browser; status returns its current accounts. */
+  readonly session?: { readonly signIn: string; readonly status: string }
   /** Its name to the user, for a provider Switch doesn't know. */
   readonly label?: string
   /** The Keychain service it kept these accounts in before connections: moved in once, then emptied. */
@@ -28,6 +30,7 @@ export const need: Schema.Codec<Need> = Schema.Struct({
   scopes: Schema.Array(Schema.String),
   multiple: Schema.Boolean,
   kind: Schema.optionalKey(Schema.Literals(["oauth", "key", "session"])),
+  session: Schema.optionalKey(Schema.Struct({ signIn: Schema.String, status: Schema.String })),
   label: Schema.optionalKey(Schema.String),
   legacy: Schema.optionalKey(Schema.String),
 })
