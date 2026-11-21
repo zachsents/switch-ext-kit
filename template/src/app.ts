@@ -1,15 +1,15 @@
 // A starting point: a read-only tool, one that changes something and says so as an event, and a
 // widget drawn from the read-only tool's result. Rename, then replace the notes with the real thing.
 import { Context, Effect, Layer, Ref, Schema } from "effect"
-import { AppEvents, defineApp, defineEvent, SWITCH_CATALOG, tool } from "spur-kit"
-import type { AppEventsService } from "spur-kit"
+import { AppEvents, defineApp, defineEvent, SWITCH_CATALOG, tool } from "switch-ext-kit"
+import type { AppEventsService } from "switch-ext-kit"
 
 const note = Schema.Struct({ id: Schema.Finite, text: Schema.String })
 type Note = typeof note.Type
 
 export const Added = defineEvent("hello.note_added", 1, Schema.Struct({ note }))
 
-/** What the spur keeps: here in memory; a real one reads the world it watches. */
+/** What the extension keeps: here in memory; a real one reads the world it watches. */
 export class Notes extends Context.Service<
   Notes,
   {
@@ -55,7 +55,7 @@ const add = tool(
 export const helloApp = defineApp<Notes>({
   name: "hello",
   version: "1",
-  instructions: "Notes. What the spur is for, in a line the agent reads.",
+  instructions: "Notes. What the extension is for, in a line the agent reads.",
   tools: [list, add],
   events: [Added],
   widgets: [

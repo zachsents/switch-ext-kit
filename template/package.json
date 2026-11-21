@@ -1,10 +1,10 @@
 {
-  "name": "spur-hello",
+  "name": "switch-ext-hello",
   "version": "0.1.0",
   "private": true,
   "description": "What it is, in a line.",
   "license": "MIT",
-  "repository": "github:OWNER/spur-hello",
+  "repository": "github:OWNER/switch-ext-hello",
   "type": "module",
   "scripts": {
     "start": "bun src/main.ts",
@@ -15,7 +15,7 @@
     "captions": "ui-captions src",
     "check": "bun run typecheck && bun run captions && bun run fix"
   },
-  "spur": {
+  "extension": {
     "name": "hello",
     "main": "src/main.ts",
     "widgets": [

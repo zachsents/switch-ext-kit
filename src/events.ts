@@ -1,5 +1,5 @@
-// A spur's events: a type, a version and an Effect Schema for the payload. The brain checks each one
-// against its schema on the way in; a spur checks it before it's sent.
+// An extension's events: a type, a version and an Effect Schema for the payload. The brain checks
+// each one against its schema on the way in; an extension checks it before it's sent.
 import { Result, Schema } from "effect"
 import type { Cause } from "effect"
 
@@ -8,7 +8,7 @@ export type Payload<T> = Schema.Codec<T, unknown>
 
 /**
  * An event before it's in the log: its type and payload, and optionally its own id and time. An
- * id the spur gives (stable for one occurrence) is recorded once however often it's sent.
+ * id the extension gives (stable for one occurrence) is recorded once however often it's sent.
  */
 export interface Draft {
   readonly type: string

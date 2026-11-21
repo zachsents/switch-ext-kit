@@ -1,10 +1,11 @@
-// What a spur says about itself before it runs: the `spur` key of its package.json. The host reads
-// it when it installs the package; the core decides from it which machine runs the spur.
+// What an extension says about itself before it runs: the `extension` key of its package.json. The
+// host reads it when it installs the package; the core decides from it which machine runs the
+// extension.
 import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { Schema } from "effect"
 
-/** An account a spur needs the user to connect: its provider, the scopes, one or many. */
+/** An account an extension needs the user to connect: its provider, the scopes, one or many. */
 export interface Need {
   /** Whose account: "google", "github". */
   readonly provider: string
@@ -13,7 +14,7 @@ export interface Need {
   readonly multiple: boolean
   /**
    * How it's connected: OAuth (the default, for a provider Switch knows), a key the user gives
-   * (an API key, a bot token), or a session the spur holds itself (a signed-in browser).
+   * (an API key, a bot token), or a session the extension holds itself (a signed-in browser).
    */
   readonly kind?: "oauth" | "key" | "session"
   /** Its name to the user, for a provider Switch doesn't know. */
@@ -30,7 +31,7 @@ export const need: Schema.Codec<Need> = Schema.Struct({
   label: Schema.optionalKey(Schema.String),
   legacy: Schema.optionalKey(Schema.String),
 })
-/** What a spur says about itself: the `spur` key of its package.json. */
+/** What an extension says about itself: the `extension` key of its package.json. */
 export interface Manifest {
   /** Its name to Switch: its tools are `<name>_<tool>`, its events `<name>.<event>`. */
   readonly name: string
@@ -38,7 +39,7 @@ export interface Manifest {
   readonly main?: string
   /** Or what runs it instead of `main`: an argv, its `./` paths from the package's folder. */
   readonly command?: readonly string[]
-  /** A Switchboard appendage (sbmcp), made a spur by the shim. */
+  /** A Switchboard appendage (sbmcp), made an extension by the shim. */
   readonly shim?: "switchboard"
   /** What the machine running it must provide: "macos", "lan:printers". */
   readonly needs?: readonly string[]
@@ -70,11 +71,13 @@ export const manifest: Schema.Codec<Manifest> = Schema.Struct({
 const pkg = Schema.Struct({
   name: Schema.String,
   version: Schema.optionalKey(Schema.String),
-  spur: manifest,
+  extension: Schema.optionalKey(manifest),
+  /** The key's name before extensions were renamed: still read, never written. */
+  spur: Schema.optionalKey(manifest),
 })
 const decodePkg = Schema.decodeUnknownResult(Schema.fromJsonString(pkg))
 
-/** An installed package's manifest, its package name and version; why not, if it isn't a spur. */
+/** An installed package's manifest, its package name and version; why not, if it isn't an extension. */
 export const readManifest = (
   dir: string,
 ):
@@ -86,11 +89,15 @@ export const readManifest = (
   }
   const read = decodePkg(readFileSync(at, "utf-8"))
   if (read._tag === "Failure") {
-    return { error: `Not a spur: ${read.failure.message}` }
+    return { error: `Not an extension: ${read.failure.message}` }
   }
   const p = read.success
-  if ((p.spur.main === undefined) === (p.spur.command === undefined)) {
-    return { error: "A spur has main or command, one of them" }
+  const m = p.extension ?? p.spur
+  if (m === undefined) {
+    return { error: "Not an extension: no `extension` key" }
   }
-  return { package: p.name, version: p.version ?? "0.0.0", manifest: p.spur }
+  if ((m.main === undefined) === (m.command === undefined)) {
+    return { error: "An extension has main or command, one of them" }
+  }
+  return { package: p.name, version: p.version ?? "0.0.0", manifest: m }
 }

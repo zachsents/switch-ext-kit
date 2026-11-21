@@ -1,9 +1,9 @@
 {
-  "name": "spur-kit",
+  "name": "switch-ext-kit",
   "version": "0.2.0",
-  "description": "The spur convention for Switch: tools, events, widgets and a manifest, served as MCP.",
+  "description": "The extension convention for Switch: tools, events, widgets and a manifest, served as MCP.",
   "license": "MIT",
-  "repository": "github:zachsents/spur-kit",
+  "repository": "github:zachsents/switch-ext-kit",
   "bin": {
     "ui-captions": "./bin/ui-captions.ts"
   },

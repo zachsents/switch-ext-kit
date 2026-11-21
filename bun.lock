@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "spur-kit",
+      "name": "switch-ext-kit",
       "dependencies": {
         "@modelcontextprotocol/server": "^2.4.0",
         "oxc-parser": "^0.159.0",

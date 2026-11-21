@@ -1,6 +1,7 @@
-// Messages, whatever spur they come from. A spur's event that is a message carries, beside its
-// own payload, who sent it (`sender`: a person or someone's agent) and what it is (`message`), in
-// these shapes. Switch knows no spur: the inbox, Contacts' links and the tagger read only these.
+// Messages, whatever extension they come from. An extension's event that is a message carries,
+// beside its own payload, who sent it (`sender`: a person or someone's agent) and what it is
+// (`message`), in these shapes. Switch knows no extension: the inbox, Contacts' links and the
+// tagger read only these.
 import type { Json } from "./shim.ts"
 
 export interface Sender {
@@ -70,10 +71,10 @@ const isMessage = (v: unknown): v is Message =>
   typeof v.conversation === "string" &&
   typeof v.text === "string"
 
-/** A message as the inbox reads it: what it is, who sent it, and its spur. */
+/** A message as the inbox reads it: what it is, who sent it, and its extension. */
 export interface Received extends Message {
   readonly sender: Sender
-  readonly spur: string
+  readonly extension: string
 }
 
 /** A stored event as a message, if it is one. `time` stands in for a missing `at`. */
@@ -82,12 +83,12 @@ export const messageOf = (type: string, payload: unknown, time: number): Receive
     return null
   }
   const m = payload.message
-  const spur = type.split(".")[0] ?? ""
+  const extension = type.split(".")[0] ?? ""
   return {
     ...m,
     at: typeof m.at === "number" && m.at > 0 ? m.at : time,
-    channel: m.channel ?? spur,
+    channel: m.channel ?? extension,
     sender: payload.sender,
-    spur,
+    extension,
   }
 }

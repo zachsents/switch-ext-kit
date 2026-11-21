@@ -35,7 +35,7 @@ export const VERSION = "ax.switch/version"
 /** The connections an app needs, in its server capabilities' extensions. */
 export const CONNECTIONS = "ax.switch/connections"
 /**
- * What a spur reaches beyond itself, in its handshake: other spurs' tools it calls
+ * What an extension reaches beyond itself, in its handshake: other extensions' tools it calls
  * (`switch/call`) and the brain's event types it follows (`switch/follow`), each a name or a
  * prefix ending in `*`. Nothing else is answered.
  */
@@ -212,7 +212,7 @@ export interface App<R = never> {
   readonly widgets: readonly WidgetDef[]
 }
 
-/** Tools a spur calls (`switch/call`) and brain event types it follows (`switch/follow`). */
+/** Tools an extension calls (`switch/call`) and brain event types it follows (`switch/follow`). */
 export interface Reaches {
   readonly calls?: readonly string[]
   readonly follows?: readonly string[]

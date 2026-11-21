@@ -2,7 +2,7 @@
   "extends": "./template/tsconfig.json",
   "compilerOptions": {
     "paths": {
-      "spur-kit": ["./src/index.ts"]
+      "switch-ext-kit": ["./src/index.ts"]
     }
   },
   "include": ["template/src"]

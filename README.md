@@ -1,31 +1,31 @@
-# spur-kit
+# switch-ext-kit
 
-The convention for Switch spurs: a spur's tools (MCP tools), events (MCP Events, with an Effect
+The convention for Switch extensions: an extension's tools (MCP tools), events (MCP Events, with an Effect
 Schema and a version), widgets (A2UI, with `McpApp` for custom drawing), its manifest, and serving
-it as MCP on stdio. Also the shim that makes a Switchboard appendage a spur.
+it as MCP on stdio. Also the shim that makes a Switchboard appendage an extension.
 
 ## Install
 
 ```sh
-bun add github:zachsents/spur-kit effect
+bun add github:zachsents/switch-ext-kit effect
 ```
 
-## What a spur is
+## What an extension is
 
 One general capability that makes repeated work efficient: not a category (travel, errands), and
-not a one-off site script (a one-off is done with the general spurs, such as the browser and email).
+not a one-off site script (a one-off is done with the general extensions, such as the browser and email).
 How the user likes it used (pay once they've approved) is learned in Switch's brain, never written
-into the spur. It has one of two homes:
+into the extension. It has one of two homes:
 
-- **Its own public repo** (`spur-<name>`), for an important, general one, with nothing personal in
+- **Its own public repo** (`switch-ext-<name>`), for an important, general one, with nothing personal in
   it.
-- **A folder in the user's private spurs monorepo**, for a personal one. Names and businesses may be
+- **A folder in the user's private extensions monorepo**, for a personal one. Names and businesses may be
   there; secrets never are.
 
-## A spur
+## An extension
 
 ```ts
-import { defineApp, serveStdio, tool } from "spur-kit"
+import { defineApp, serveStdio, tool } from "switch-ext-kit"
 import { Effect, Layer } from "effect"
 
 const app = defineApp({
@@ -40,7 +40,7 @@ await serveStdio(app, Layer.empty)
 Its `package.json` carries the manifest:
 
 ```json
-"spur": {
+"extension": {
   "name": "hello",
   "main": "src/main.ts",
   "needs": ["macos"],
@@ -52,12 +52,12 @@ Its `package.json` carries the manifest:
 `template/` is one to copy: a read-only tool, a tool that emits an event, a widget, the manifest
 and the checks (`bun run check`: types, UI copy, lint, format).
 
-A spur that isn't TypeScript gives `command` instead of `main` (its `./` paths from the package's
+An extension that isn't TypeScript gives `command` instead of `main` (its `./` paths from the package's
 folder), and `"shim": "switchboard"` if it's a Switchboard appendage.
 
 ## Widgets
 
-A spur never suggests or makes a space: spaces are the user's. A widget goes on no board until
+An extension never suggests or makes a space: spaces are the user's. A widget goes on no board until
 the user (or the agent, asked) adds it to a space; until then it's in the space's picker.
 
 A widget's `size` says how it sits in a space's grid, in units (one square cell): its `aspect`
@@ -72,17 +72,17 @@ empty-state line saying what the app does or how it works, first person, a toolt
 a placeholder past two, or a dimmed state word or age beside a name. It reads TSX (JSX text, copy
 attributes, the ink from classes), A2UI `text`/`label` properties in TypeScript, and Swift. Its
 allowlist (`ui-captions.allow`: a path, a tab, words from the string) is for real information only,
-such as a permission that's off. A spur runs it in its check, as the template does.
+such as a permission that's off. An extension runs it in its check, as the template does.
 
 ## Its own log
 
-`Log.layer({ path, events, projections, commands })` keeps a spur's events on its own SQLite file,
+`Log.layer({ path, events, projections, commands })` keeps an extension's events on its own SQLite file,
 with read models over them (`defineCommand`, `on`, `Projection`): `dispatch` a command, `read` the
 projections, follow `changes`.
 
 ## Models
 
-A spur holds no model keys. `Models.layer` asks the host that runs it, over MCP, which answers
+An extension holds no model keys. `Models.layer` asks the host that runs it, over MCP, which answers
 with the user's profile: `decide(input, questions, role?)` picks among choices with
 probabilities, `complete(role, system, prompt)` writes text. The host declares the
 `ax.switch/models` client extension and answers `models/decide` and `models/complete`; without
@@ -93,16 +93,16 @@ one, each call fails with `ModelError`.
 `Asks` (provided by `Models.layer`) puts an item in the user's queue through the host:
 `open({ title, body, kind?, options?, drafts?, attachments?, space?, answerTo? })` and
 `close(id, status)`. The host declares `ax.switch/asks` and answers `asks/open` and
-`asks/close`. `answerTo` names one of the spur's tools (make it `appOnly`), called once the item
+`asks/close`. `answerTo` names one of the extension's tools (make it `appOnly`), called once the item
 closes with `{ item, status, answer }`.
 
 A sealed ask takes a secret without it entering the brain, a chat or a model's context: make a
-one-time key with `sealedKey()` (`spur-kit/sealed`), open the ask with `kind: "sealed"`,
+one-time key with `sealedKey()` (`switch-ext-kit/sealed`), open the ask with `kind: "sealed"`,
 `sealed: { key, use }` and `answerTo`, and keep `secretKey`. The user's client seals what they type
 to `key` (HPKE, RFC 9180: X25519, HKDF-SHA256, AES-256-GCM, bound to the item's id and `use`); the
 core hands the sealed bytes only to `answerTo`, as `{ item, use, enc, ct }`, and records only that
 it was answered. `openSealed(secretKey, item, use, { enc, ct })` gives the secret back.
 
-Switch installs it from a git URL or package name: `spurs_install`, or Spurs in the desktop. A
-monorepo folder is installed at a commit from the core machine's `~/.switch/spurs.json`
+Switch installs it from a git URL or package name: `extensions_install`, or Extensions in the desktop. A
+monorepo folder is installed at a commit from the core machine's `~/.switch/extensions.json`
 (`{ "source": "github:<owner>/<repo>#<commit>", "path": "<folder>" }`), packed from that folder.

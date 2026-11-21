@@ -1,4 +1,4 @@
-// A spur's entry: its app served as MCP on stdio, until the client (its host) goes.
+// An extension's entry: its app served as MCP on stdio, until the client (its host) goes.
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio"
 import { Effect, Layer } from "effect"
 

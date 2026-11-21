@@ -1,9 +1,10 @@
-// The user's own laptop, the machine they work at: nothing heavy or interruptive of the agent's runs
-// there while another machine can do it, even while they've stepped away. Which machine that is, is
-// data: its host lists `personal` in what it provides, and a spur sees it in SWITCH_PROVIDES.
-// Ported from Switchboard's laptop guard (sb guard, the macOS appendage's personal.rs): it reads
-// what a command line runs, with the variables it sets followed, into `sh -c`, `eval` and the
-// scripts it runs, and stand-ins first on PATH refuse what a script runs deeper down.
+// The user's own laptop, the machine they work at: nothing heavy or interruptive of the agent's
+// runs there while another machine can do it, even while they've stepped away. Which machine that
+// is, is data: its host lists `personal` in what it provides, and an extension sees it in
+// SWITCH_PROVIDES. Ported from Switchboard's laptop guard (sb guard, the macOS appendage's
+// personal.rs): it reads what a command line runs, with the variables it sets followed, into `sh
+// -c`, `eval` and the scripts it runs, and stand-ins first on PATH refuse what a script runs deeper
+// down.
 import {
   chmodSync,
   existsSync,
@@ -28,11 +29,11 @@ export const PERSON_ASKED = "person_asked"
 const ASKED_VAR = "PERSON_ASKED"
 const ASKED_MIN = 8
 
-/** What this spur's machine provides, as its host said. */
+/** What this extension's machine provides, as its host said. */
 export const provides = (): readonly string[] =>
   (process.env.SWITCH_PROVIDES ?? "").split(",").filter((p) => p !== "")
 
-/** Whether this spur runs on the user's own laptop. */
+/** Whether this extension runs on the user's own laptop. */
 export const personal = (): boolean => provides().includes(PERSONAL)
 
 /** Whether `said` is the user's words, enough to be theirs. */
@@ -423,7 +424,7 @@ const listed = (elsewhere: readonly string[]) =>
  * where to do it instead.
  */
 export const refusal = (what: string, elsewhere: readonly string[] = []): string =>
-  `This is the user's own laptop, the machine they work at, so the agent doesn't ${what} here, even while they've stepped away. Do it on ${listed(elsewhere)} instead (its macos spur's exec, files copied there with rsync first). Only when the user asked for exactly this on this machine, call again with ${PERSON_ASKED} (a shell command: led by ${ASKED_VAR}='…'): their words, and when they said them.`
+  `This is the user's own laptop, the machine they work at, so the agent doesn't ${what} here, even while they've stepped away. Do it on ${listed(elsewhere)} instead (its macos extension's exec, files copied there with rsync first). Only when the user asked for exactly this on this machine, call again with ${PERSON_ASKED} (a shell command: led by ${ASKED_VAR}='…'): their words, and when they said them.`
 
 const SHIMS = ["cargo", "swift", "xcodebuild", "xcrun", "ffmpeg"]
 

@@ -1,7 +1,7 @@
-// A spur's own event log: its events on its own SQLite file, with read models over them. Switch's
-// brain write path, cut down to what a spur needs. That path follows T3 Code's orchestration-v2,
-// MIT, Copyright (c) 2026 T3 Tools Inc.: decide, then one transaction for events and projections,
-// then publish after commit.
+// An extension's own event log: its events on its own SQLite file, with read models over them.
+// Switch's brain write path, cut down to what an extension needs. That path follows T3 Code's
+// orchestration-v2, MIT, Copyright (c) 2026 T3 Tools Inc.: decide, then one transaction for events
+// and projections, then publish after commit.
 import { Database } from "bun:sqlite"
 import { mkdirSync } from "node:fs"
 import path from "node:path"
@@ -360,13 +360,13 @@ const makeLog = (config: LogConfig): Effect.Effect<LogShape, never, Scope.Scope>
   })
 
 const logKey: Context.Service<LogService, LogShape> = Context.Service<LogService, LogShape>(
-  "spur-kit/Log",
+  "switch-ext-kit/Log",
 )
 
 const logLayer = (config: LogConfig): Layer.Layer<LogService> =>
   Layer.effect(logKey, makeLog(config))
 
-/** A spur's own event log, on its own file. */
+/** An extension's own event log, on its own file. */
 export const Log: Context.Service<LogService, LogShape> & {
   /** Opens the log at `config.path`, rebuilding a projection whose version moved. */
   readonly layer: typeof logLayer

@@ -1,9 +1,9 @@
-// Sealed answers: how a secret the user types reaches the one spur that asked for it without ever
-// touching the brain, a chat or a model's context. The spur makes a one-time key pair (`sealedKey`),
-// keeps the private half, and raises a sealed ask carrying the public half and what it's for (`use`).
-// The user's client seals what they type to that key (`seal`); the core relays the sealed bytes to
-// the spur's `answerTo` tool, which opens them (`openSealed`). The brain records only that it was
-// answered.
+// Sealed answers: how a secret the user types reaches the one extension that asked for it without
+// ever touching the brain, a chat or a model's context. The extension makes a one-time key pair
+// (`sealedKey`), keeps the private half, and raises a sealed ask carrying the public half and what
+// it's for (`use`). The user's client seals what they type to that key (`seal`); the core relays
+// the sealed bytes to the extension's `answerTo` tool, which opens them (`openSealed`). The brain
+// records only that it was answered.
 //
 // The seal is HPKE base mode (RFC 9180), single shot: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256,
 // AES-256-GCM, empty aad. The ask's id and its use are bound into the key schedule through `info`
@@ -124,8 +124,8 @@ const importPublic = async (raw: Uint8Array) =>
   await subtle().importKey("raw", concat(raw), X25519, true, [])
 
 /**
- * A one-time key pair for a sealed ask: `key` goes on the ask, `secretKey` stays with the spur (in
- * memory, or its Keychain while the ask waits) and opens the answer.
+ * A one-time key pair for a sealed ask: `key` goes on the ask, `secretKey` stays with the extension
+ * (in memory, or its Keychain while the ask waits) and opens the answer.
  */
 export const sealedKey = async (): Promise<{ key: string; secretKey: string }> => {
   const pair = await keyPair()

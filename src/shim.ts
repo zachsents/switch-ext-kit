@@ -1,15 +1,15 @@
-// Filters on a spur's MCP messages, as its host relays them. `switchboard` turns a Switchboard
-// appendage (sbmcp: events with `_meta["switchboard/record"]`) into a Switch spur, so its tools
-// carry over as they are; `readOnly` keeps only the tools that only look.
+// Filters on an extension's MCP messages, as its host relays them. `switchboard` turns a
+// Switchboard appendage (sbmcp: events with `_meta["switchboard/record"]`) into a Switch extension,
+// so its tools carry over as they are; `readOnly` keeps only the tools that only look.
 import { VERSION } from "./app.ts"
 import { MESSAGE_SCHEMA, SENDER_SCHEMA } from "./messages.ts"
 
 export type Json = Record<string, unknown>
 
 export interface Filter {
-  /** A message on its way to the spur: forwarded (maybe changed), or answered here instead. */
+  /** A message on its way to the extension: forwarded (maybe changed), or answered here instead. */
   readonly inbound: (m: Json) => { readonly forward: Json | null; readonly answer: Json | null }
-  /** A message from the spur: passed on (maybe changed), or dropped. */
+  /** A message from the extension: passed on (maybe changed), or dropped. */
   readonly outbound: (m: Json) => Json | null
 }
 
@@ -71,13 +71,13 @@ const CHANNEL_EVENT = "message"
 const ENVELOPE = ["about", "refs", "importance", "sender", "message"] as const
 
 /**
- * A Switchboard appendage as a spur. Its event types gain the spur's prefix (`pr` becomes
+ * A Switchboard appendage as an extension. Its event types gain the extension's prefix (`pr` becomes
  * `github-prs.pr`); each occurrence's payload is its record: `kind` and `stream` (where the type, or
- * the occurrence, says it lands; else `event` in `events/<spur>`), the record's `about`, `refs` and
+ * the occurrence, says it lands; else `event` in `events/<extension>`), the record's `about`, `refs` and
  * `importance`, and its body as `data`. A fixed record id is the event id, so a resend is one event.
  */
-export const switchboard = (spur: string): Filter => {
-  const prefix = `${spur}.`
+export const switchboard = (extension: string): Filter => {
+  const prefix = `${extension}.`
   const requests = asked()
   const placed = new Map<string, Json>()
 
@@ -101,7 +101,7 @@ export const switchboard = (spur: string): Filter => {
     const stream = [envelope.stream, where.stream].find((x) => typeof x === "string")
     const payload: Json = {
       kind: typeof where.kind === "string" ? where.kind : "event",
-      stream: typeof stream === "string" ? stream : `events/${spur}`,
+      stream: typeof stream === "string" ? stream : `events/${extension}`,
       data: params.data ?? null,
     }
     for (const key of ENVELOPE) {
@@ -138,13 +138,13 @@ export const switchboard = (spur: string): Filter => {
       data: { content, meta },
       _meta: {
         [RECORD]: {
-          sender: { handle: text("user") || text("user_id"), via: spur, me: true },
+          sender: { handle: text("user") || text("user_id"), via: extension, me: true },
           message: {
-            id: `${spur}:${id}`,
-            conversation: `${spur}:${text("chat_id")}`,
+            id: `${extension}:${id}`,
+            conversation: `${extension}:${text("chat_id")}`,
             text: content,
             at: Date.parse(ts),
-            channel: spur,
+            channel: extension,
           },
         },
       },
@@ -154,7 +154,7 @@ export const switchboard = (spur: string): Filter => {
   // A channel server has no events of its own: its messages become one.
   let channel = false
   const channelEvent = (): Json => {
-    placed.set(CHANNEL_EVENT, { kind: "message", stream: `comms/${spur}` })
+    placed.set(CHANNEL_EVENT, { kind: "message", stream: `comms/${extension}` })
     return {
       name: `${prefix}${CHANNEL_EVENT}`,
       delivery: ["push"],

@@ -1,7 +1,8 @@
-// Models for a spur, through the host that runs it: a spur holds no model keys. Its requests go to
-// the client over MCP, under the `ax.switch/models` extension, and the core answers them with the
-// user's own profile: `models/decide` picks among choices, `models/complete` writes text. The same
-// connection carries a spur's action items (`ax.switch/asks`): `asks/open` and `asks/close`.
+// Models for an extension, through the host that runs it: an extension holds no model keys. Its
+// requests go to the client over MCP, under the `ax.switch/models` extension, and the core answers
+// them with the user's own profile: `models/decide` picks among choices, `models/complete` writes
+// text. The same connection carries an extension's action items (`ax.switch/asks`): `asks/open` and
+// `asks/close`.
 import { Context, Deferred, Effect, Layer, Schema } from "effect"
 import type { Cause } from "effect"
 
@@ -105,7 +106,7 @@ export interface PeerService {
 export const Peer: Context.Service<PeerService, PeerShape> = Context.Service<
   PeerService,
   PeerShape
->("spur-kit/Peer")
+>("switch-ext-kit/Peer")
 
 /** How long a call waits for the client to connect before it gives up. */
 const CONNECT_MS = 30_000
@@ -116,9 +117,9 @@ const failed = (e: unknown) =>
 const modelsKey: Context.Service<ModelsService, ModelsShape> = Context.Service<
   ModelsService,
   ModelsShape
->("spur-kit/Models")
+>("switch-ext-kit/Models")
 
-/** The client capability extension a host declares when it takes a spur's action items. */
+/** The client capability extension a host declares when it takes an extension's action items. */
 export const ASKS = "ax.switch/asks"
 
 /** A draft: words to send in the user's name, editable on the card. */
@@ -140,9 +141,9 @@ export interface AskAttachment {
 }
 
 /**
- * An action item a spur puts in the user's queue. `answerTo` names one of its own tools (best
+ * An action item an extension puts in the user's queue. `answerTo` names one of its own tools (best
  * `appOnly`) the core calls once it closes: with `{ item, status, answer }`, or for a sealed ask
- * `{ item, use, enc, ct }`, which `openSealed` (spur-kit/sealed) opens with the ask's secret key.
+ * `{ item, use, enc, ct }`, which `openSealed` (switch-ext-kit/sealed) opens with the ask's secret key.
  * A sealed ask's answer reaches only that tool; the brain records only that it was answered.
  */
 export interface AskInput {
@@ -162,7 +163,7 @@ export interface AskInput {
 }
 
 export interface AsksShape {
-  /** Opens it, or revises the open one with `id` (an id this spur gave before). */
+  /** Opens it, or revises the open one with `id` (an id this extension gave before). */
   readonly open: (ask: AskInput, id?: string) => Effect.Effect<{ readonly id: string }, ModelError>
   readonly close: (id: string, status: "done" | "dismissed") => Effect.Effect<void, ModelError>
 }
@@ -173,7 +174,7 @@ export interface AsksService {
 }
 
 const asksKey: Context.Service<AsksService, AsksShape> = Context.Service<AsksService, AsksShape>(
-  "spur-kit/Asks",
+  "switch-ext-kit/Asks",
 )
 
 const opened = Schema.Struct({ id: Schema.String })
