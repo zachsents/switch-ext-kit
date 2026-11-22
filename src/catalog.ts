@@ -16,6 +16,8 @@ export interface DataBinding {
 export interface FunctionCall {
   readonly "@call": string
   readonly args?: Readonly<Record<string, unknown>>
+  /** The catalog whose function it is; none, the surface's catalog. */
+  readonly catalogId?: string
 }
 
 /** A value, or where it comes from. */
@@ -28,6 +30,7 @@ const binding = Schema.Struct({ "@path": Schema.String })
 const call = Schema.Struct({
   "@call": Schema.String,
   args: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  catalogId: Schema.optionalKey(Schema.String),
 })
 const bound = <S extends Schema.Top>(s: S) => Schema.Union([s, binding, call])
 const text = bound(Schema.String)
