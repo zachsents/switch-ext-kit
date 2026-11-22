@@ -150,6 +150,15 @@ export interface AskInput {
   readonly title: string
   readonly body: string
   readonly kind?: "task" | "question" | "approval" | "sealed"
+  /** Only this extension verifies completion; user dismissal remains available. */
+  readonly completion?: "owner"
+  /** An explicit action, such as retrying the private challenge. */
+  readonly action?: {
+    readonly label: string
+    readonly app: string
+    readonly tool: string
+    readonly args?: Readonly<Record<string, unknown>>
+  }
   /** Its space; Home when absent. */
   readonly space?: string
   readonly options?: readonly string[]
