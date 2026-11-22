@@ -33,9 +33,12 @@ export type {
   WidgetSetting,
 } from "./app.ts"
 export { BASIC_CATALOG, MCP_CATALOG, mcpApp, surface, SWITCH_CATALOG, view } from "./a2ui.ts"
-export { BASIC_PARTS, SWITCH_PARTS } from "./catalog.ts"
+export { BASIC_PARTS, ICONS, SWITCH_PARTS } from "./catalog.ts"
 export type {
+  Action,
+  BasicParts,
   Bound,
+  CheckRule,
   ChildList,
   Choices,
   DataBinding,

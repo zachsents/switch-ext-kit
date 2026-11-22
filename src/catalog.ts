@@ -394,24 +394,306 @@ export const SWITCH_PARTS: { readonly [K in keyof SwitchParts]: Schema.Codec<Swi
   }),
 }
 
-/** The parts of A2UI's basic catalog (`BASIC_CATALOG`), which clients draw in Switch's look. */
-export const BASIC_PARTS: readonly string[] = [
-  "Text",
-  "Image",
-  "Icon",
-  "Video",
-  "AudioPlayer",
-  "Row",
-  "Column",
-  "List",
-  "Card",
-  "Tabs",
-  "Modal",
-  "Divider",
-  "Button",
-  "TextField",
-  "CheckBox",
-  "ChoicePicker",
-  "Slider",
-  "DateTimeInput",
+// ---- A2UI's basic catalog (`BASIC_CATALOG`), v1.0: its parts as the spec declares them
+
+/** The basic catalog's icons by name. */
+export const ICONS: readonly string[] = [
+  "accountCircle",
+  "add",
+  "arrowBack",
+  "arrowForward",
+  "attachFile",
+  "calendarToday",
+  "call",
+  "camera",
+  "check",
+  "close",
+  "delete",
+  "download",
+  "edit",
+  "event",
+  "error",
+  "fastForward",
+  "favorite",
+  "favoriteOff",
+  "folder",
+  "help",
+  "home",
+  "info",
+  "locationOn",
+  "lock",
+  "lockOpen",
+  "mail",
+  "menu",
+  "moreVert",
+  "moreHoriz",
+  "notificationsOff",
+  "notifications",
+  "pause",
+  "payment",
+  "person",
+  "phone",
+  "photo",
+  "play",
+  "print",
+  "refresh",
+  "rewind",
+  "search",
+  "send",
+  "settings",
+  "share",
+  "shoppingCart",
+  "skipNext",
+  "skipPrevious",
+  "star",
+  "starHalf",
+  "starOff",
+  "stop",
+  "upload",
+  "visibility",
+  "visibilityOff",
+  "volumeDown",
+  "volumeMute",
+  "volumeOff",
+  "volumeUp",
+  "warning",
 ]
+interface Weighted {
+  readonly weight?: number
+}
+/** What a Button does: an event the host handles, or a catalog function. */
+export type Action =
+  | {
+      readonly event: {
+        readonly name: string
+        readonly userMessage?: Bound<string>
+        readonly context?: Readonly<Record<string, unknown>>
+      }
+    }
+  | { readonly functionCall: FunctionCall }
+/** A check an input runs: a condition, and what's wrong when it fails. */
+export interface CheckRule {
+  readonly condition: DataBinding | FunctionCall
+  readonly message?: string
+}
+type Checked = Weighted & { readonly checks?: readonly CheckRule[] }
+type Justify =
+  | "start"
+  | "center"
+  | "end"
+  | "spaceBetween"
+  | "spaceAround"
+  | "spaceEvenly"
+  | "stretch"
+type Align = "start" | "center" | "end" | "stretch"
+
+/** Every part of A2UI's basic catalog, by name. */
+export interface BasicParts {
+  readonly Text: Weighted & { readonly text: Bound<string>; readonly variant?: "caption" | "body" }
+  readonly Image: Weighted & {
+    readonly url: Bound<string>
+    readonly description?: Bound<string>
+    readonly fit?: "contain" | "cover" | "fill" | "none" | "scaleDown"
+    readonly variant?:
+      | "icon"
+      | "avatar"
+      | "smallFeature"
+      | "mediumFeature"
+      | "largeFeature"
+      | "header"
+  }
+  readonly Icon: Weighted & {
+    readonly name: string | { readonly svgPath: Bound<string> } | DataBinding
+  }
+  readonly Video: Weighted & { readonly url: Bound<string>; readonly posterUrl?: Bound<string> }
+  readonly AudioPlayer: Weighted & {
+    readonly url: Bound<string>
+    readonly description?: Bound<string>
+  }
+  readonly Row: Weighted & {
+    readonly children: ChildList
+    readonly justify?: Justify
+    readonly align?: Align
+  }
+  readonly Column: Weighted & {
+    readonly children: ChildList
+    readonly justify?: Justify
+    readonly align?: Align
+  }
+  readonly List: Weighted & {
+    readonly children: ChildList
+    readonly direction?: "vertical" | "horizontal"
+    readonly align?: Align
+  }
+  readonly Card: Weighted & { readonly child: string }
+  readonly Tabs: Weighted & {
+    readonly tabs: readonly { readonly title: Bound<string>; readonly child: string }[]
+  }
+  readonly Modal: Weighted & { readonly trigger: string; readonly content: string }
+  readonly Divider: Weighted & { readonly axis?: "horizontal" | "vertical" }
+  readonly Button: Checked & {
+    readonly child: string
+    readonly variant?: "default" | "primary" | "borderless"
+    readonly action: Action
+  }
+  readonly TextField: Checked & {
+    readonly label: Bound<string>
+    readonly value?: Bound<string>
+    readonly placeholder?: Bound<string>
+    readonly variant?: "longText" | "number" | "shortText" | "obscured"
+  }
+  readonly CheckBox: Checked & { readonly label: Bound<string>; readonly value: Bound<boolean> }
+  readonly ChoicePicker: Checked & {
+    readonly label?: Bound<string>
+    readonly variant?: "multipleSelection" | "mutuallyExclusive"
+    readonly options: readonly { readonly label: Bound<string>; readonly value: string }[]
+    readonly value: Bound<readonly string[]>
+    readonly displayStyle?: "checkbox" | "chips"
+    readonly filterable?: boolean
+  }
+  readonly Slider: Checked & {
+    readonly label?: Bound<string>
+    readonly min?: number
+    readonly max: number
+    readonly value: Bound<number>
+    readonly steps?: number
+  }
+  readonly DateTimeInput: Checked & {
+    readonly value: Bound<string>
+    readonly enableDate?: boolean
+    readonly enableTime?: boolean
+    readonly min?: Bound<string>
+    readonly max?: Bound<string>
+    readonly label?: Bound<string>
+  }
+}
+
+const weighted = { weight: Schema.optionalKey(Schema.Finite) }
+const checked = {
+  ...weighted,
+  checks: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        condition: Schema.Union([binding, call]),
+        message: Schema.optionalKey(Schema.String),
+      }),
+    ),
+  ),
+}
+const justify = Schema.optionalKey(
+  Schema.Literals([
+    "start",
+    "center",
+    "end",
+    "spaceBetween",
+    "spaceAround",
+    "spaceEvenly",
+    "stretch",
+  ]),
+)
+const align = Schema.optionalKey(Schema.Literals(["start", "center", "end", "stretch"]))
+const textList = bound(Schema.Array(Schema.String))
+
+/** Each basic part's properties, to check a component by. */
+export const BASIC_PARTS: { readonly [K in keyof BasicParts]: Schema.Codec<BasicParts[K]> } = {
+  Text: Schema.Struct({
+    ...weighted,
+    text,
+    variant: Schema.optionalKey(Schema.Literals(["caption", "body"])),
+  }),
+  Image: Schema.Struct({
+    ...weighted,
+    url: text,
+    description: Schema.optionalKey(text),
+    fit: Schema.optionalKey(Schema.Literals(["contain", "cover", "fill", "none", "scaleDown"])),
+    variant: Schema.optionalKey(
+      Schema.Literals([
+        "icon",
+        "avatar",
+        "smallFeature",
+        "mediumFeature",
+        "largeFeature",
+        "header",
+      ]),
+    ),
+  }),
+  Icon: Schema.Struct({
+    ...weighted,
+    name: Schema.Union([
+      Schema.String.check(Schema.makeFilter((n: string) => ICONS.includes(n) || `No icon ${n}`)),
+      Schema.Struct({ svgPath: text }),
+      binding,
+    ]),
+  }),
+  Video: Schema.Struct({ ...weighted, url: text, posterUrl: Schema.optionalKey(text) }),
+  AudioPlayer: Schema.Struct({ ...weighted, url: text, description: Schema.optionalKey(text) }),
+  Row: Schema.Struct({ ...weighted, children, justify, align }),
+  Column: Schema.Struct({ ...weighted, children, justify, align }),
+  List: Schema.Struct({
+    ...weighted,
+    children,
+    direction: Schema.optionalKey(Schema.Literals(["vertical", "horizontal"])),
+    align,
+  }),
+  Card: Schema.Struct({ ...weighted, child: Schema.String }),
+  Tabs: Schema.Struct({
+    ...weighted,
+    tabs: Schema.Array(Schema.Struct({ title: text, child: Schema.String })).check(
+      Schema.isMinLength(1),
+    ),
+  }),
+  Modal: Schema.Struct({ ...weighted, trigger: Schema.String, content: Schema.String }),
+  Divider: Schema.Struct({
+    ...weighted,
+    axis: Schema.optionalKey(Schema.Literals(["horizontal", "vertical"])),
+  }),
+  Button: Schema.Struct({
+    ...checked,
+    child: Schema.String,
+    variant: Schema.optionalKey(Schema.Literals(["default", "primary", "borderless"])),
+    action: Schema.Union([
+      Schema.Struct({
+        event: Schema.Struct({
+          name: Schema.String,
+          userMessage: Schema.optionalKey(text),
+          context: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+        }),
+      }),
+      Schema.Struct({ functionCall: call }),
+    ]),
+  }),
+  TextField: Schema.Struct({
+    ...checked,
+    label: text,
+    value: Schema.optionalKey(text),
+    placeholder: Schema.optionalKey(text),
+    variant: Schema.optionalKey(Schema.Literals(["longText", "number", "shortText", "obscured"])),
+  }),
+  CheckBox: Schema.Struct({ ...checked, label: text, value: flag }),
+  ChoicePicker: Schema.Struct({
+    ...checked,
+    label: Schema.optionalKey(text),
+    variant: Schema.optionalKey(Schema.Literals(["multipleSelection", "mutuallyExclusive"])),
+    options: Schema.Array(Schema.Struct({ label: text, value: Schema.String })),
+    value: textList,
+    displayStyle: Schema.optionalKey(Schema.Literals(["checkbox", "chips"])),
+    filterable: Schema.optionalKey(Schema.Boolean),
+  }),
+  Slider: Schema.Struct({
+    ...checked,
+    label: Schema.optionalKey(text),
+    min: Schema.optionalKey(Schema.Finite),
+    max: Schema.Finite,
+    value: number,
+    steps: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  }),
+  DateTimeInput: Schema.Struct({
+    ...checked,
+    value: text,
+    enableDate: Schema.optionalKey(Schema.Boolean),
+    enableTime: Schema.optionalKey(Schema.Boolean),
+    min: Schema.optionalKey(text),
+    max: Schema.optionalKey(text),
+    label: Schema.optionalKey(text),
+  }),
+}
