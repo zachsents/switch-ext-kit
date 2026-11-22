@@ -1,7 +1,7 @@
 // Filters on an extension's MCP messages, as its host relays them. `switchboard` turns a
 // Switchboard appendage (sbmcp: events with `_meta["switchboard/record"]`) into a Switch extension,
 // so its tools carry over as they are; `readOnly` keeps only the tools that only look.
-import { VERSION } from "./app.ts"
+import { CONNECTIONS, VERSION } from "./app.ts"
 import { MESSAGE_SCHEMA, SENDER_SCHEMA } from "./messages.ts"
 
 export type Json = Record<string, unknown>
@@ -212,10 +212,11 @@ const refused = (id: unknown, name: string): Json => ({
   result: { content: [{ type: "text", text: `${name} isn't read-only` }], isError: true },
 })
 
-/** Lists and calls only the tools marked `readOnlyHint`; the rest are refused without reaching it. */
+/** Read-only business tools, plus the declared account sign-in/status used privately by Connections. */
 export const readOnly = (): Filter => {
   const requests = asked()
   const looks = new Set<string>()
+  const auth = new Set<string>()
   return {
     inbound: (m) => {
       if (m.method === "tools/call") {
@@ -226,10 +227,43 @@ export const readOnly = (): Filter => {
       return pass(m)
     },
     outbound: (m) => {
-      if (requests.take(m) === "tools/list" && isJson(m.result)) {
+      const method = requests.take(m)
+      if ((method === "initialize" || method === "server/discover") && isJson(m.result)) {
+        auth.clear()
+        looks.clear()
+        const connections = field(field(field(m.result, "capabilities"), "extensions"), CONNECTIONS)
+        for (const declared of list(connections.needs).filter(isJson)) {
+          if (declared.kind === "key") {
+            continue
+          }
+          const session = field(declared, "session")
+          for (const name of [session.signIn, session.status]) {
+            if (typeof name === "string" && name !== "") {
+              auth.add(name)
+            }
+          }
+        }
+      }
+      if (method === "tools/list" && isJson(m.result)) {
+        looks.clear()
         const tools = list(m.result.tools)
           .filter(isJson)
-          .filter((t) => field(t, "annotations").readOnlyHint === true)
+          .filter(
+            (t) =>
+              field(t, "annotations").speaksForPerson !== true &&
+              (field(t, "annotations").readOnlyHint === true || auth.has(String(t.name))),
+          )
+          .map((t) =>
+            auth.has(String(t.name))
+              ? {
+                  ...t,
+                  _meta: {
+                    ...field(t, "_meta"),
+                    ui: { ...field(field(t, "_meta"), "ui"), visibility: ["app"] },
+                  },
+                }
+              : t,
+          )
         for (const t of tools) {
           looks.add(String(t.name))
         }
