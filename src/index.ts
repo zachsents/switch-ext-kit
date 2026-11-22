@@ -33,6 +33,21 @@ export type {
   WidgetSetting,
 } from "./app.ts"
 export { BASIC_CATALOG, MCP_CATALOG, mcpApp, surface, SWITCH_CATALOG, view } from "./a2ui.ts"
+export { BASIC_PARTS, SWITCH_PARTS } from "./catalog.ts"
+export type {
+  Bound,
+  ChildList,
+  Choices,
+  DataBinding,
+  Day,
+  Figures,
+  FunctionCall,
+  Points,
+  Series,
+  Slice,
+  SwitchComponent,
+  SwitchParts,
+} from "./catalog.ts"
 export { checker, defineEvent, Rejected } from "./events.ts"
 export type { Check, DefinedEvent, Draft, EventDef, Payload } from "./events.ts"
 export { defineCommand, Log, on } from "./log.ts"

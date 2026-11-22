@@ -1,7 +1,14 @@
 // A starting point: a read-only tool, one that changes something and says so as an event, and a
 // widget drawn from the read-only tool's result. Rename, then replace the notes with the real thing.
 import { Context, Effect, Layer, Ref, Schema } from "effect"
-import { AppEvents, defineApp, defineEvent, SWITCH_CATALOG, tool } from "switch-ext-kit"
+import {
+  AppEvents,
+  BASIC_CATALOG,
+  defineApp,
+  defineEvent,
+  SWITCH_CATALOG,
+  tool,
+} from "switch-ext-kit"
 import type { AppEventsService } from "switch-ext-kit"
 
 const note = Schema.Struct({ id: Schema.Finite, text: Schema.String })
@@ -66,7 +73,7 @@ export const helloApp = defineApp<Notes>({
       resource: "ui://hello/notes",
       tool: "list",
       refresh: [Added.type],
-      // A line per note, in Switch's catalog.
+      // A line per note: Switch's Line, in a List from A2UI's basic catalog.
       a2ui: () => [
         { version: "1.0", createSurface: { surfaceId: "notes", catalogId: SWITCH_CATALOG } },
         {
@@ -76,7 +83,8 @@ export const helloApp = defineApp<Notes>({
             components: [
               {
                 id: "root",
-                component: "Lines",
+                component: "List",
+                catalogId: BASIC_CATALOG,
                 children: { componentId: "line", path: "/notes" },
               },
               { id: "line", component: "Line", label: { "@path": "text" } },

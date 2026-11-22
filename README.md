@@ -65,6 +65,28 @@ A widget's `size` says how it sits in a space's grid, in units (one square cell)
 `preferred` and `max` `{ cols, rows }`, whether it `grows` past preferred, and what it is with
 nothing to show (`empty`: a single `line`, the default, or `hide`).
 
+### Catalogs
+
+A widget is A2UI 1.0, drawn by every client in Switch's look, from two catalogs a component can mix
+(a component names its catalog with `catalogId` when it isn't its surface's):
+
+- **A2UI's basic catalog** (`BASIC_CATALOG`, `BASIC_PARTS`): `Text` (Markdown; a `#` heading is a
+  section's heading; `variant: "caption"` is supporting words), `Image`, `Icon`, `Row`, `Column`,
+  `List`, `Card`, `Tabs`, `Modal`, `Divider`, `Button`, `TextField`, `CheckBox`, `ChoicePicker`,
+  `Slider`, `DateTimeInput`, `Video`, `AudioPlayer`.
+- **Switch's catalog** (`SWITCH_CATALOG`, `SWITCH_PARTS`, its types in `SwitchParts`): the house
+  parts `Line`, `Slot`, `Field`, `Title`, `Row`, `Pick`, `Feed`, `Check`, `Entry`, and charts that
+  take plain data: `BarChart` (grouped or `stacked`, `horizontal`), `LineChart`, `AreaChart`,
+  `Sparkline`, `DonutChart`, `ScatterChart`, `Histogram`, `CalendarHeatmap` and `Meter`.
+
+```ts
+{ id: "sales", component: "BarChart", labels: ["Mon", "Tue", "Wed"],
+  series: [{ name: "Orders", values: [12, 19, 7] }], prefix: "$" }
+```
+
+A property can be bound to the widget's data (its tool's result): `series: { "@path": "/series" }`.
+`McpApp` (`mcpApp`) is for drawing neither catalog can.
+
 ## UI copy
 
 `ui-captions [--allow <file>] [path…]`, a bin, fails on UI copy that narrates: a caption, hint or
