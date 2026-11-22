@@ -25,6 +25,8 @@ export const mcpApp = (
     readonly title: string
     readonly html: string
     readonly allowedTools?: readonly string[]
+    /** JSON Pointer to the widget input the host sends as MCP App tool-input. */
+    readonly toolInput?: string
   },
 ): readonly unknown[] =>
   surface(id, MCP_CATALOG, [
@@ -33,6 +35,9 @@ export const mcpApp = (
       component: "McpApp",
       title: options.title,
       htmlContent: options.html,
+      ...(options.toolInput === undefined
+        ? {}
+        : { data: { paths: { toolInput: options.toolInput } } }),
       ...(options.allowedTools === undefined ? {} : { allowedTools: [...options.allowedTools] }),
     },
   ])
