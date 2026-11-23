@@ -82,6 +82,15 @@ const progressTokenOf = Schema.decodeUnknownOption(
   Schema.Struct({ progressToken: Schema.Union([Schema.String, Schema.Finite]) }),
 )
 
+/**
+ * A tool call made once, in its `_meta`: a stable id (an item's answer to the extension that raised
+ * it, say). The kit runs the tool once per id, across restarts (in the outbox's file): the same id
+ * again answers that it ran, and one cut off partway (the extension stopped) isn't run again but
+ * answers that it may have run. Every extension dedupes this way without code of its own.
+ */
+export const ONCE = "ax.switch/once"
+const onceOf = Schema.decodeUnknownOption(Schema.Struct({ [ONCE]: Schema.String }))
+
 /** A widget's descriptor, in its `ui://` resource's `resources/list` entry. */
 export const WIDGET = "ax.switch/widget"
 /** What a widget's resource holds: a JSON array of A2UI messages. */
@@ -313,7 +322,11 @@ CREATE TABLE IF NOT EXISTS outbox (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL, name TEXT NOT NULL,
   timestamp TEXT NOT NULL, data TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS outbox_name ON outbox (name, seq);
+CREATE TABLE IF NOT EXISTS once (id TEXT PRIMARY KEY, finished INTEGER NOT NULL);
 `
+
+/** Tool calls made once that it remembers; past it, the oldest go. */
+const ONCE_KEPT = 10_000
 
 /** What an `events/stream` sends: the type's events not yet acknowledged, then each one as it's emitted. */
 export interface Subscribed {
@@ -330,6 +343,13 @@ export interface AppEventsShape {
   readonly subscribe: (name: string) => Effect.Effect<Subscribed, never, Scope.Scope>
   /** The client kept these: they leave the outbox. */
   readonly ack: (cursors: readonly string[]) => Effect.Effect<void>
+  /**
+   * A call made once (`ONCE`) begins: null when it's new, and it's recorded as begun; else whether
+   * the first one finished (not when it was cut off partway).
+   */
+  readonly claim: (id: string) => Effect.Effect<{ readonly finished: boolean } | null>
+  /** A call made once finished. */
+  readonly settle: (id: string) => Effect.Effect<void>
 }
 
 /** The `AppEvents` service's identifier, as a requirement. */
@@ -404,6 +424,14 @@ const appEventsLayer = (
         }
       })
       const live = yield* PubSub.unbounded<Occurrence>()
+      const claimed = db.query<{ finished: number }, [string]>(
+        "SELECT finished FROM once WHERE id = ?",
+      )
+      const begin = db.query<unknown, [string]>("INSERT INTO once (id, finished) VALUES (?, 0)")
+      const trimOnce = db.query<unknown, [number]>(
+        "DELETE FROM once WHERE rowid <= (SELECT rowid FROM once ORDER BY rowid DESC LIMIT 1 OFFSET ?)",
+      )
+      const finish = db.query<unknown, [string]>("UPDATE once SET finished = 1 WHERE id = ?")
 
       const emit = (draft: Draft) =>
         Effect.suspend(() => {
@@ -446,7 +474,23 @@ const appEventsLayer = (
           removeAll(cursors.map(Number).filter(Number.isInteger))
         })
 
-      return { emit, subscribe, ack }
+      const claim = (id: string) =>
+        Effect.sync(() => {
+          const was = claimed.get(id)
+          if (was !== null) {
+            return { finished: was.finished === 1 }
+          }
+          begin.run(id)
+          trimOnce.run(ONCE_KEPT)
+          return null
+        })
+
+      const settle = (id: string) =>
+        Effect.sync(() => {
+          finish.run(id)
+        })
+
+      return { emit, subscribe, ack, claim, settle }
     }),
   )
 
@@ -498,6 +542,20 @@ const toResult = (value: unknown): CallToolResult => {
     : { content: [{ type: "text", text }] }
 }
 
+/** A call made once, again: it ran, or was cut off partway and isn't run again, as it may have acted. */
+const again = (name: string, finished: boolean): CallToolResult =>
+  finished
+    ? { content: [{ type: "text", text: `${name} already ran for this.` }] }
+    : {
+        content: [
+          {
+            type: "text",
+            text: `${name} was already running for this when the extension stopped, so whether it finished is unknown. It isn't run again.`,
+          },
+        ],
+        isError: true,
+      }
+
 const anything = Schema.toStandardSchemaV1(Schema.Record(Schema.String, Schema.Unknown))
 const streamParams = Schema.toStandardSchemaV1(
   Schema.Struct({
@@ -548,6 +606,7 @@ export const serve: <R>(
       },
     )
 
+    const inFlight = new Map<string, Promise<CallToolResult>>()
     for (const t of app.tools) {
       // A tool names the UI resource its results show in (MCP Apps' field, which A2UI's MCP catalog
       // reads too); a tool feeding several widgets names the first.
@@ -587,25 +646,50 @@ export const serve: <R>(
                 })
               }),
           })
-        return await run(
-          t.run(input).pipe(
-            Effect.provideService(Progress, progress),
-            Effect.provideService(
-              Caller,
-              Option.match(callerOf(meta), {
-                onNone: () => Caller.defaultValue(),
-                onSome: (m) => m[CALLER],
-              }),
-            ),
-            Effect.map(toResult),
-            Effect.catch((error) =>
-              Effect.succeed<CallToolResult>({
-                content: [{ type: "text", text: describe(error) }],
-                isError: true,
-              }),
-            ),
+        const answering = t.run(input).pipe(
+          Effect.provideService(Progress, progress),
+          Effect.provideService(
+            Caller,
+            Option.match(callerOf(meta), {
+              onNone: () => Caller.defaultValue(),
+              onSome: (m) => m[CALLER],
+            }),
+          ),
+          Effect.map(toResult),
+          Effect.catch((error) =>
+            Effect.succeed<CallToolResult>({
+              content: [{ type: "text", text: describe(error) }],
+              isError: true,
+            }),
           ),
         )
+        const id = Option.getOrNull(onceOf(meta))?.[ONCE] ?? null
+        if (id === null) {
+          return await run(answering)
+        }
+        // The same id while its first call runs waits for that one.
+        const key = `${t.name}\n${id}`
+        const under = inFlight.get(key)
+        if (under !== undefined) {
+          return await under
+        }
+        const first = run(
+          Effect.gen(function* onceOnly() {
+            const was = yield* events.claim(key)
+            if (was !== null) {
+              return again(t.name, was.finished)
+            }
+            const out = yield* answering
+            yield* events.settle(key)
+            return out
+          }),
+        )
+        inFlight.set(key, first)
+        try {
+          return await first
+        } finally {
+          inFlight.delete(key)
+        }
       }
       if (t.input) {
         mcp.registerTool(

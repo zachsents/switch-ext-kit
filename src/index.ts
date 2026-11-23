@@ -5,6 +5,7 @@ export {
   AppEvents,
   Caller,
   CALLER,
+  ONCE,
   CONNECTIONS,
   REACHES,
   defineApp,

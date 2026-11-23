@@ -106,6 +106,9 @@ another machine. Everything it keeps goes there:
   each one (`ACK`), and go again on the next `events/stream` of their type: a core restart loses
   none. The core keeps an event once however often it comes, by its id; give one an `id` that's stable
   for what happened when emitting it again could happen.
+- **Tool calls made once**: a call whose `_meta` carries `ONCE` (a stable id, as the core gives an
+  item's answer) runs once per id, recorded in the same file. The same id again doesn't run it, and
+  one cut off as the extension stopped isn't run again, as it may have acted.
 - **Its own records** in its log (below).
 - **Any other file** written whole with `writeFileAtomic` (to a temp file, then renamed), never in
   place.
