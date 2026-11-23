@@ -130,6 +130,17 @@ export interface Feed {
   readonly ratio?: number
 }
 
+/** A picture of a Gallery: its link, and what it shows. */
+export interface GalleryImage {
+  readonly url: string
+  readonly description?: string
+}
+
+/** Several pictures as a row that scrolls sideways, each at one height and its own width, opening on a click. */
+export interface Gallery {
+  readonly images: Bound<readonly GalleryImage[]>
+}
+
 /** A line that ticks off: its ring calls `action` with `args`. */
 export interface Check {
   readonly label: Bound<string>
@@ -249,6 +260,7 @@ export interface SwitchParts {
   readonly Row: Row
   readonly Pick: Pick
   readonly Feed: Feed
+  readonly Gallery: Gallery
   readonly Check: Check
   readonly Entry: Entry
   readonly BarChart: BarChart
@@ -336,6 +348,13 @@ export const SWITCH_PARTS: { readonly [K in keyof SwitchParts]: Schema.Codec<Swi
     ...action,
     every: Schema.optionalKey(px),
     ratio: Schema.optionalKey(px),
+  }),
+  Gallery: Schema.Struct({
+    images: bound(
+      Schema.Array(
+        Schema.Struct({ url: Schema.String, description: Schema.optionalKey(Schema.String) }),
+      ),
+    ),
   }),
   Check: Schema.Struct({
     label: text,

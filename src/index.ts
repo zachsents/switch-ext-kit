@@ -48,6 +48,7 @@ export type {
   Day,
   Figures,
   FunctionCall,
+  GalleryImage,
   Points,
   Series,
   Slice,
