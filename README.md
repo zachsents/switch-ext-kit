@@ -76,7 +76,8 @@ A widget is A2UI 1.0, drawn by every client in Switch's look, from two catalogs 
   `Slider`, `DateTimeInput`, `Video`, `AudioPlayer`.
 - **Switch's catalog** (`SWITCH_CATALOG`, `SWITCH_PARTS`, its types in `SwitchParts`): the house
   parts `Line`, `Slot`, `Field`, `Title`, `Row`, `Pick`, `Feed`, `Gallery` (`images: [{ url, description? }]`, a row that scrolls sideways),
-  `Check`, `Entry`, and charts that
+  `Check`, `Entry`, `Playing` (what's playing: art, title, who by, back, play/pause and next keys
+  calling its tools, a rule running while it plays; paused, one quiet line), and charts that
   take plain data: `BarChart` (grouped or `stacked`, `horizontal`), `LineChart`, `AreaChart`,
   `Sparkline`, `DonutChart`, `ScatterChart`, `Histogram`, `CalendarHeatmap` and `Meter`.
 

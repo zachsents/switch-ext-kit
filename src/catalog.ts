@@ -150,6 +150,29 @@ export interface Check {
   readonly args?: Bound<Readonly<Record<string, unknown>>>
 }
 
+/**
+ * What's playing: its art, title and who by, keys back, play or pause, and next, each calling its
+ * extension's tool, and a rule along its foot that runs while it plays. Paused, one quiet line:
+ * its title and the play key.
+ */
+export interface Playing {
+  readonly title: Bound<string>
+  readonly by?: Bound<string>
+  /** The art's link. */
+  readonly art?: Bound<string>
+  readonly playing: Bound<boolean>
+  /** Ms in, as of `asOf`. */
+  readonly at?: Bound<number>
+  /** Ms long. */
+  readonly length?: Bound<number>
+  /** When `at` was read, in ms. */
+  readonly asOf?: Bound<number>
+  /** The tools the keys call, with no arguments. */
+  readonly back: string
+  readonly toggle: string
+  readonly next: string
+}
+
 /** A line to write in: Enter calls `action` with `args` and the words under `field`. */
 export interface Entry {
   readonly placeholder?: Bound<string>
@@ -263,6 +286,7 @@ export interface SwitchParts {
   readonly Gallery: Gallery
   readonly Check: Check
   readonly Entry: Entry
+  readonly Playing: Playing
   readonly BarChart: BarChart
   readonly LineChart: LineChart
   readonly AreaChart: AreaChart
@@ -363,6 +387,18 @@ export const SWITCH_PARTS: { readonly [K in keyof SwitchParts]: Schema.Codec<Swi
     ...action,
   }),
   Entry: Schema.Struct({ placeholder: Schema.optionalKey(text), field: Schema.String, ...action }),
+  Playing: Schema.Struct({
+    title: text,
+    by: Schema.optionalKey(text),
+    art: Schema.optionalKey(text),
+    playing: flag,
+    at: Schema.optionalKey(number),
+    length: Schema.optionalKey(number),
+    asOf: Schema.optionalKey(number),
+    back: Schema.String,
+    toggle: Schema.String,
+    next: Schema.String,
+  }),
   BarChart: Schema.Struct({
     ...lines,
     stacked: Schema.optionalKey(Schema.Boolean),
