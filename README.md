@@ -98,6 +98,21 @@ attributes, the ink from classes), A2UI `text`/`label` properties in TypeScript,
 allowlist (`ui-captions.allow`: a path, a tab, words from the string) is for real information only,
 such as a permission that's off. An extension runs it in its check, as the template does.
 
+## Its state
+
+Its host runs it in a folder of its own, its working directory, and moves that folder with it to
+another machine. Everything it keeps goes there:
+- **Events it emits** wait in an outbox there (`events.db`, `serveStdio`'s) until the core acknowledges
+  each one (`ACK`), and go again on the next `events/stream` of their type: a core restart loses
+  none. The core keeps an event once however often it comes, by its id; give one an `id` that's stable
+  for what happened when emitting it again could happen.
+- **Its own records** in its log (below).
+- **Any other file** written whole with `writeFileAtomic` (to a temp file, then renamed), never in
+  place.
+
+The brain's events an extension follows (`switch/follow`, `{ types, after? }`) come as `switch/event`
+notifications, each with its `seq`; following again `after` the last one handled misses none.
+
 ## Its own log
 
 `Log.layer({ path, events, projections, commands })` keeps an extension's events on its own SQLite file,

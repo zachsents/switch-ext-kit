@@ -1,5 +1,6 @@
 export {
   A2UI_MIME_TYPE,
+  ACK,
   answer,
   AppEvents,
   Caller,
@@ -28,6 +29,7 @@ export type {
   Occurrence,
   Reaches,
   Size,
+  Subscribed,
   Surface,
   Tool,
   Units,
@@ -96,7 +98,8 @@ export type {
 export type { Manifest, Need } from "./manifest.ts"
 export { chain, isJson, readOnly, switchboard } from "./shim.ts"
 export type { Filter, Json } from "./shim.ts"
-export { serveStdio } from "./stdio.ts"
+export { OUTBOX_FILE, serveStdio } from "./stdio.ts"
+export { writeFileAtomic } from "./files.ts"
 export { BACKED_OUT_MS, BackedOut, Dwelled, left, Switched, uiEvents, Viewed } from "./ui.ts"
 export type { Moved, Seen, Stayed } from "./ui.ts"
 export { isSender, MESSAGE_SCHEMA, messageOf, SENDER_SCHEMA } from "./messages.ts"

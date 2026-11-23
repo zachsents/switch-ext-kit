@@ -1,7 +1,10 @@
 // The app convention: tools as MCP tools, events as MCP Events (SEP-3415, push delivery) with an
 // Effect Schema and a version, widgets as A2UI (v1.0): `ui://` resources holding A2UI messages, each
 // listed with its descriptor. Custom drawing is an MCP App inside, in A2UI's `McpApp` component.
+import { Database } from "bun:sqlite"
 import { randomUUID } from "node:crypto"
+import { mkdirSync } from "node:fs"
+import path from "node:path"
 import { McpServer, ProtocolError } from "@modelcontextprotocol/server"
 import type {
   CallToolResult,
@@ -269,22 +272,47 @@ export const defineApp = <R = never>(app: {
   return { ...app, connections: app.connections ?? [], events: [...events, ...uiEvents], widgets }
 }
 
-/** One MCP Events occurrence. */
+/** One MCP Events occurrence. `cursor` is its place in the extension's outbox. */
 export interface Occurrence {
   readonly eventId: string
   readonly name: string
   readonly timestamp: string
   readonly data: unknown
+  readonly cursor: string
 }
 
-const BUFFERED = 1000
+/**
+ * The client takes events in (`ACK`, `{ cursors }`): each one it has kept for good. Until then
+ * an event stays in the extension's outbox and is sent again on the next `events/stream` of its type,
+ * so the client keeps it once however often it's sent (by its `eventId`).
+ */
+export const ACK = "notifications/events/ack"
+
+/** Events of one type an outbox keeps unacknowledged; past it, the oldest go. */
+const KEPT = 10_000
+
+const OUTBOX = `
+CREATE TABLE IF NOT EXISTS outbox (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL, name TEXT NOT NULL,
+  timestamp TEXT NOT NULL, data TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS outbox_name ON outbox (name, seq);
+`
+
+/** What an `events/stream` sends: the type's events not yet acknowledged, then each one as it's emitted. */
+export interface Subscribed {
+  readonly backlog: readonly Occurrence[]
+  /** Live occurrences of any type; those at or before `through` are in the backlog already. */
+  readonly live: PubSub.Subscription<Occurrence>
+  readonly through: number
+}
 
 /** How an app emits its events, to whoever subscribed (the gateway). */
 export interface AppEventsShape {
+  /** Kept in the outbox before it returns, so it reaches the client even across a restart. */
   readonly emit: (draft: Draft) => Effect.Effect<void, Rejected>
-  readonly subscribe: (
-    name: string,
-  ) => Effect.Effect<PubSub.Subscription<Occurrence>, never, Scope.Scope>
+  readonly subscribe: (name: string) => Effect.Effect<Subscribed, never, Scope.Scope>
+  /** The client kept these: they leave the outbox. */
+  readonly ack: (cursors: readonly string[]) => Effect.Effect<void>
 }
 
 /** The `AppEvents` service's identifier, as a requirement. */
@@ -297,17 +325,68 @@ const appEventsKey: Context.Service<AppEventsService, AppEventsShape> = Context.
   AppEventsShape
 >("switch/AppEvents")
 
-const appEventsLayer = (app: {
-  readonly events: readonly AppEvent[]
-}): Layer.Layer<AppEventsService> =>
+interface OutboxRow {
+  readonly seq: number
+  readonly id: string
+  readonly name: string
+  readonly timestamp: string
+  readonly data: string
+}
+
+const parseJson: (json: string) => unknown = JSON.parse
+
+const toOccurrence = (r: OutboxRow): Occurrence => ({
+  eventId: r.id,
+  name: r.name,
+  timestamp: r.timestamp,
+  data: parseJson(r.data),
+  cursor: String(r.seq),
+})
+
+const openOutbox = (file: string) => {
+  if (file !== ":memory:") {
+    mkdirSync(path.dirname(file), { recursive: true })
+  }
+  const db = new Database(file, { create: true, strict: true })
+  db.run("PRAGMA journal_mode = WAL")
+  db.run("PRAGMA synchronous = NORMAL")
+  db.run("PRAGMA busy_timeout = 5000")
+  db.run(OUTBOX)
+  return db
+}
+
+const appEventsLayer = (
+  app: { readonly events: readonly AppEvent[] },
+  file = ":memory:",
+): Layer.Layer<AppEventsService> =>
   Layer.effect(
     appEventsKey,
     Effect.gen(function* making() {
       const defs = new Map(app.events.map((e) => [e.type, e]))
+      const db = yield* Effect.acquireRelease(
+        Effect.sync(() => openOutbox(file)),
+        (d) =>
+          Effect.sync(() => {
+            d.close()
+          }),
+      )
+      const insert = db.query<{ seq: number }, [string, string, string, string]>(
+        "INSERT INTO outbox (id, name, timestamp, data) VALUES (?, ?, ?, ?) RETURNING seq",
+      )
+      const trim = db.query<unknown, [string, string, number]>(
+        "DELETE FROM outbox WHERE name = ? AND seq <= (SELECT seq FROM outbox WHERE name = ? ORDER BY seq DESC LIMIT 1 OFFSET ?)",
+      )
+      const pending = db.query<OutboxRow, [string]>(
+        "SELECT * FROM outbox WHERE name = ? ORDER BY seq",
+      )
+      const last = db.query<{ seq: number | null }, []>("SELECT max(seq) AS seq FROM outbox")
+      const remove = db.query<unknown, [number]>("DELETE FROM outbox WHERE seq = ?")
+      const removeAll = db.transaction((seqs: readonly number[]) => {
+        for (const seq of seqs) {
+          remove.run(seq)
+        }
+      })
       const live = yield* PubSub.unbounded<Occurrence>()
-      const listeners = new Map<string, number>()
-      // Emitted before anyone subscribed: kept for the first subscriber, as sbmcp does.
-      const waiting = new Map<string, Occurrence[]>()
 
       const emit = (draft: Draft) =>
         Effect.suspend(() => {
@@ -319,43 +398,46 @@ const appEventsLayer = (app: {
           if (Result.isFailure(checked)) {
             return Effect.fail(new Rejected({ reason: `${draft.type}: ${checked.failure}` }))
           }
+          const eventId = draft.id ?? randomUUID()
+          const timestamp = draft.time ?? new Date().toISOString()
+          const data = JSON.stringify(checked.success)
+          const row = insert.get(eventId, draft.type, timestamp, data)
+          trim.run(draft.type, draft.type, KEPT)
           const occurrence: Occurrence = {
-            eventId: draft.id ?? randomUUID(),
+            eventId,
             name: draft.type,
-            timestamp: draft.time ?? new Date().toISOString(),
+            timestamp,
             data: checked.success,
+            cursor: String(row?.seq ?? 0),
           }
-          if ((listeners.get(draft.type) ?? 0) > 0) {
-            return Effect.asVoid(PubSub.publish(live, occurrence))
-          }
-          const held = waiting.get(draft.type) ?? []
-          held.push(occurrence)
-          held.splice(0, Math.max(0, held.length - BUFFERED))
-          waiting.set(draft.type, held)
-          return Effect.void
+          return Effect.asVoid(PubSub.publish(live, occurrence))
         })
 
+      // Subscribed first, then the outbox read, so nothing falls between the two.
       const subscribe = (name: string) =>
         Effect.gen(function* subscribing() {
           const subscription = yield* PubSub.subscribe(live)
-          listeners.set(name, (listeners.get(name) ?? 0) + 1)
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
-              listeners.set(name, (listeners.get(name) ?? 1) - 1)
-            }),
-          )
-          const held = waiting.get(name) ?? []
-          waiting.delete(name)
-          yield* PubSub.publishAll(live, held)
-          return subscription
+          return {
+            backlog: pending.all(name).map(toOccurrence),
+            live: subscription,
+            through: last.get()?.seq ?? 0,
+          }
         })
 
-      return { emit, subscribe }
+      const ack = (cursors: readonly string[]) =>
+        Effect.sync(() => {
+          removeAll(cursors.map(Number).filter(Number.isInteger))
+        })
+
+      return { emit, subscribe, ack }
     }),
   )
 
 export const AppEvents: Context.Service<AppEventsService, AppEventsShape> & {
-  /** Emits `app`'s events, holding each for the first subscriber to its type. */
+  /**
+   * Emits `app`'s events through an outbox on `file` (in memory unless given), each kept until the
+   * client acknowledges it.
+   */
   readonly layer: typeof appEventsLayer
 } = Object.assign(appEventsKey, { layer: appEventsLayer })
 
@@ -406,6 +488,8 @@ const streamParams = Schema.toStandardSchemaV1(
     heartbeatMs: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   }),
 )
+
+const ackParams = Schema.toStandardSchemaV1(Schema.Struct({ cursors: Schema.Array(Schema.String) }))
 
 const jsonSchema = (schema: Schema.Top) => {
   const doc = Schema.toJsonSchemaDocument(schema)
@@ -514,8 +598,8 @@ export const serve: <R>(
     }))
     mcp.server.setRequestHandler("events/list", { params: anything }, () => ({ events: list }))
 
-    // A push subscription: confirm, then each occurrence as a notification, with a heartbeat when
-    // quiet, until the client cancels. No replay, so every cursor is null.
+    // A push subscription: confirm, then the type's events not yet acknowledged, then each one as
+    // it's emitted, with a heartbeat when quiet, until the client cancels.
     mcp.server.setRequestHandler("events/stream", { params: streamParams }, async (params, ctx) => {
       if (!app.events.some((e) => e.type === params.name)) {
         throw new ProtocolError(-32_023, "NotFound", { kind: "event" })
@@ -529,24 +613,30 @@ export const serve: <R>(
       return await run(
         Effect.scoped(
           Effect.gen(function* streaming() {
-            const subscription = yield* events.subscribe(params.name)
+            const { backlog, live, through } = yield* events.subscribe(params.name)
             yield* notify("notifications/events/active", {
               cursor: null,
               truncated: false,
               heartbeatMs,
             })
+            for (const o of backlog) {
+              yield* notify("notifications/events/event", { ...o })
+            }
             for (;;) {
-              const next = yield* Effect.timeoutOption(PubSub.take(subscription), heartbeatMs)
+              const next = yield* Effect.timeoutOption(PubSub.take(live), heartbeatMs)
               if (Option.isNone(next)) {
                 yield* notify("notifications/events/heartbeat", { cursor: null })
-              } else if (next.value.name === params.name) {
-                yield* notify("notifications/events/event", { ...next.value, cursor: null })
+              } else if (next.value.name === params.name && Number(next.value.cursor) > through) {
+                yield* notify("notifications/events/event", { ...next.value })
               }
             }
           }),
         ),
         { signal: ctx.mcpReq.signal },
       ).then(() => ({ _meta: meta }))
+    })
+    mcp.server.setNotificationHandler(ACK, { params: ackParams }, async (params) => {
+      await run(events.ack(params.cursors))
     })
 
     const closed = yield* Deferred.make<boolean>()
