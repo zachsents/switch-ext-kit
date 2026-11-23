@@ -65,6 +65,23 @@ const callerOf = Schema.decodeUnknownOption(
     }),
   }),
 )
+/**
+ * Tells whoever called the running tool how it's going (MCP's `notifications/progress`, when the
+ * call asked with a `progressToken`): a line of words, and how far along, else one step more.
+ */
+export type ProgressShape = (
+  message: string,
+  progress?: number,
+  total?: number,
+) => Effect.Effect<void>
+export const Progress: Context.Reference<ProgressShape> = Context.Reference<ProgressShape>(
+  "ax.switch/progress",
+  { defaultValue: () => () => Effect.void },
+)
+const progressTokenOf = Schema.decodeUnknownOption(
+  Schema.Struct({ progressToken: Schema.Union([Schema.String, Schema.Finite]) }),
+)
+
 /** A widget's descriptor, in its `ui://` resource's `resources/list` entry. */
 export const WIDGET = "ax.switch/widget"
 /** What a widget's resource holds: a JSON array of A2UI messages. */
@@ -545,9 +562,34 @@ export const serve: <R>(
           },
         },
       }
-      const call = async (input: unknown, meta: unknown) =>
-        await run(
+      const call = async (
+        input: unknown,
+        meta: unknown,
+        notify: (n: { method: string; params: Record<string, unknown> }) => Promise<void>,
+      ) => {
+        let done = 0
+        const progress: ProgressShape = (message, at, total) =>
+          Option.match(progressTokenOf(meta), {
+            onNone: () => Effect.void,
+            onSome: ({ progressToken }) =>
+              Effect.promise(async () => {
+                done = at ?? done + 1
+                await notify({
+                  method: "notifications/progress",
+                  params: {
+                    progressToken,
+                    progress: done,
+                    message,
+                    ...(total !== undefined && { total }),
+                  },
+                }).catch(() => {
+                  /* the caller went */
+                })
+              }),
+          })
+        return await run(
           t.run(input).pipe(
+            Effect.provideService(Progress, progress),
             Effect.provideService(
               Caller,
               Option.match(callerOf(meta), {
@@ -564,14 +606,19 @@ export const serve: <R>(
             ),
           ),
         )
+      }
       if (t.input) {
         mcp.registerTool(
           t.name,
           { ...config, inputSchema: t.input },
-          async (input, ctx) => await call(input, ctx.mcpReq._meta),
+          async (input, ctx) => await call(input, ctx.mcpReq._meta, ctx.mcpReq.notify),
         )
       } else {
-        mcp.registerTool(t.name, config, async (ctx) => await call({}, ctx.mcpReq._meta))
+        mcp.registerTool(
+          t.name,
+          config,
+          async (ctx) => await call({}, ctx.mcpReq._meta, ctx.mcpReq.notify),
+        )
       }
     }
 

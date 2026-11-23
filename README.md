@@ -146,6 +146,12 @@ Switch installs it from a git URL or package name: `extensions_install`, or Exte
 monorepo folder is installed at a commit from the core machine's `~/.switch/extensions.json`
 (`{ "source": "github:<owner>/<repo>#<commit>", "path": "<folder>" }`), packed from that folder.
 
+## Progress
+
+A tool tells its caller how it's going with `Progress` (an Effect reference): `yield* (yield*
+Progress)("Ringing")`, sent as MCP's `notifications/progress` when the call asked with a
+`progressToken`, else nothing.
+
 ## The host
 
 `Host` (provided by `Models.layer`) is the rest an extension asks of the core: `call(name, args)`
