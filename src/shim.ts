@@ -135,6 +135,8 @@ export const switchboard = (extension: string): Filter => {
       name: CHANNEL_EVENT,
       eventId: id,
       timestamp: ts,
+      // Its place in the extension's own outbox, if it keeps one: acknowledged once the brain has it.
+      cursor: typeof params.cursor === "string" ? params.cursor : null,
       data: { content, meta },
       _meta: {
         [RECORD]: {
