@@ -44,10 +44,19 @@ Its `package.json` carries the manifest:
   "name": "hello",
   "main": "src/main.ts",
   "needs": ["macos"],
+  "heartbeat": 300000,
   "connections": [{ "provider": "google", "scopes": ["…"], "multiple": true }],
   "widgets": ["face"]
 }
 ```
+
+`heartbeat` is its promise, in ms: each of its heartbeat events (`<name>.heartbeat`, or
+`<name>.<part>.heartbeat` for a part) comes at least that often while it runs, and three missed is
+trouble the agent is sent to fix. A sense says in its heartbeat what's wrong now (`facts.failing`,
+null when nothing is) and, if it reads a source that moves on without it (messages, mail), how far
+behind it is (`facts.behind_ms`: 0 when its last look read everything there was, else how long
+since one did), beating at once when what's failing changes and when it falls behind or catches up.
+Switch installs no extension without a heartbeat.
 
 `template/` is one to copy: a read-only tool, a tool that emits an event, a widget, the manifest
 and the checks (`bun run check`: types, UI copy, lint, format).

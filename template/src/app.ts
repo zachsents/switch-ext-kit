@@ -1,5 +1,6 @@
-// A starting point: a read-only tool, one that changes something and says so as an event, and a
-// widget drawn from the read-only tool's result. Rename, then replace the notes with the real thing.
+// A starting point: a read-only tool, one that changes something and says so as an event, a widget
+// drawn from the read-only tool's result, and the heartbeat its manifest promises. Rename, then
+// replace the notes with the real thing.
 import { Context, Effect, Layer, Ref, Schema } from "effect"
 import {
   AppEvents,
@@ -16,6 +17,23 @@ type Note = typeof note.Type
 
 export const Added = defineEvent("hello.note_added", 1, Schema.Struct({ note }))
 
+/** Every this often, as its manifest's `heartbeat` promises. */
+const BEAT = 5 * 60_000
+
+/**
+ * How it is, beaten by what does the work (a sense's loop after each look), so it stops when that
+ * does; `failing` says what's wrong now, null when nothing is.
+ */
+export const Heartbeat = defineEvent(
+  "hello.heartbeat",
+  1,
+  Schema.Struct({
+    entity: Schema.Literal("sense:hello"),
+    summary: Schema.String,
+    facts: Schema.Struct({ failing: Schema.NullOr(Schema.String), notes: Schema.Finite }),
+  }),
+)
+
 /** What the extension keeps: here in memory; a real one reads the world it watches. */
 export class Notes extends Context.Service<
   Notes,
@@ -29,6 +47,21 @@ export class Notes extends Context.Service<
     Effect.gen(function* making() {
       const events = yield* AppEvents
       const notes = yield* Ref.make<readonly Note[]>([])
+      const beat = Effect.gen(function* beating() {
+        const n = (yield* Ref.get(notes)).length
+        yield* events.emit(
+          Heartbeat.make({
+            entity: "sense:hello",
+            summary: `${n} notes`,
+            facts: { failing: null, notes: n },
+          }),
+        )
+      })
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.andThen(Effect.ignore(beat, { log: "Warn" }), Effect.sleep(`${BEAT} millis`)),
+        ),
+      )
       return {
         all: Ref.get(notes),
         add: (text) =>
@@ -64,7 +97,7 @@ export const helloApp = defineApp<Notes>({
   version: "1",
   instructions: "Notes. What the extension is for, in a line the agent reads.",
   tools: [list, add],
-  events: [Added],
+  events: [Added, Heartbeat],
   widgets: [
     {
       name: "notes",

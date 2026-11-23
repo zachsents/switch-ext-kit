@@ -48,6 +48,11 @@ export interface Manifest {
   readonly needs?: readonly string[]
   /** It runs on every machine with what it needs, one per machine, instead of on one. */
   readonly every?: boolean
+  /**
+   * How often, at most ms apart, each of its heartbeats (`<name>.heartbeat`,
+   * `<name>.<part>.heartbeat`) says how it is while it runs: missing three in a row is trouble.
+   */
+  readonly heartbeat?: number
   /** Accounts it needs the user to connect. */
   readonly connections?: readonly Need[]
   /** The widgets it publishes, by name. */
@@ -65,6 +70,8 @@ export const manifest: Schema.Codec<Manifest> = Schema.Struct({
   needs: Schema.optionalKey(Schema.Array(Schema.String)),
   /** It runs on every machine with what it needs, one per machine, instead of on one. */
   every: Schema.optionalKey(Schema.Boolean),
+  /** How often, at most ms apart, each of its heartbeats says how it is while it runs. */
+  heartbeat: Schema.optionalKey(Schema.Number.check(Schema.isGreaterThan(0))),
   /** Accounts it needs the user to connect. */
   connections: Schema.optionalKey(Schema.Array(need)),
   /** The widgets it publishes, by name. */

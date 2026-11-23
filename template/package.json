@@ -18,6 +18,7 @@
   "extension": {
     "name": "hello",
     "main": "src/main.ts",
+    "heartbeat": 300000,
     "widgets": [
       "notes"
     ]
