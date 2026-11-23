@@ -40,6 +40,28 @@ export const CONNECTIONS = "ax.switch/connections"
  * prefix ending in `*`. Nothing else is answered.
  */
 export const REACHES = "ax.switch/reaches"
+/**
+ * Who asked for a tool call, in its `_meta`: the thread of the work that called it and that work's
+ * space. The core sets it on an agent's call, and passes on what an extension calling another's tool
+ * (`switch/call`) gives as its own call's.
+ */
+export const CALLER = "ax.switch/caller"
+export interface CallerShape {
+  readonly thread: string | null
+  readonly space: string | null
+}
+/** The work that asked for the tool call running now; nulls when the core didn't say. */
+export const Caller: Context.Reference<CallerShape> = Context.Reference<CallerShape>(CALLER, {
+  defaultValue: () => ({ thread: null, space: null }),
+})
+const callerOf = Schema.decodeUnknownOption(
+  Schema.Struct({
+    [CALLER]: Schema.Struct({
+      thread: Schema.NullOr(Schema.String),
+      space: Schema.NullOr(Schema.String),
+    }),
+  }),
+)
 /** A widget's descriptor, in its `ui://` resource's `resources/list` entry. */
 export const WIDGET = "ax.switch/widget"
 /** What a widget's resource holds: a JSON array of A2UI messages. */
@@ -439,9 +461,16 @@ export const serve: <R>(
           },
         },
       }
-      const call = async (input: unknown) =>
+      const call = async (input: unknown, meta: unknown) =>
         await run(
           t.run(input).pipe(
+            Effect.provideService(
+              Caller,
+              Option.match(callerOf(meta), {
+                onNone: () => Caller.defaultValue(),
+                onSome: (m) => m[CALLER],
+              }),
+            ),
             Effect.map(toResult),
             Effect.catch((error) =>
               Effect.succeed<CallToolResult>({
@@ -452,9 +481,13 @@ export const serve: <R>(
           ),
         )
       if (t.input) {
-        mcp.registerTool(t.name, { ...config, inputSchema: t.input }, call)
+        mcp.registerTool(
+          t.name,
+          { ...config, inputSchema: t.input },
+          async (input, ctx) => await call(input, ctx.mcpReq._meta),
+        )
       } else {
-        mcp.registerTool(t.name, config, async () => await call({}))
+        mcp.registerTool(t.name, config, async (ctx) => await call({}, ctx.mcpReq._meta))
       }
     }
 
