@@ -656,6 +656,11 @@ export const serve: <R>(
         }
       },
     })
+    mcp.server.setNotificationHandler("switch/event", { params: anything }, (params) => {
+      if (Option.isSome(peer)) {
+        peer.value.heard?.(params)
+      }
+    })
     yield* Effect.acquireRelease(
       Effect.promise(async () => {
         await mcp.connect(transport)

@@ -2,9 +2,14 @@
 // requests go to the client over MCP, under the `ax.switch/models` extension, and the core answers
 // them with the user's own profile: `models/decide` picks among choices, `models/complete` writes
 // text. The same connection carries an extension's action items (`ax.switch/asks`): `asks/open` and
-// `asks/close`.
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+// `asks/close`, and the rest it asks of the host (`Host`): other extensions' tools, the user's
+// connections, and brain events it follows.
+import { existsSync, readFileSync } from "node:fs"
+import path from "node:path"
+import { Context, Deferred, Effect, Layer, Option, Queue, Schema } from "effect"
 import type { Cause } from "effect"
+
+import { writeFileAtomic } from "./files.ts"
 
 /** The client capability extension a host declares when it answers model requests. */
 export const MODELS = "ax.switch/models"
@@ -92,10 +97,22 @@ export interface ModelsService {
 /** Sends one request to the client and decodes its result. */
 export type Send = (method: string, params: Readonly<Record<string, unknown>>) => Promise<unknown>
 
+/** A brain event an extension follows (`switch/follow`), as the host sends it (`switch/event`). */
+export interface Followed {
+  readonly seq: number
+  readonly id: string
+  readonly type: string
+  readonly source: string
+  readonly time: number
+  readonly payload: unknown
+}
+
 /** Where `serve` hands over its connection, once the client has said what it offers. */
 export interface PeerShape {
-  /** `null`: the client answers no model requests. */
+  /** `null`: the client answers no model requests. Called again on each new client. */
   readonly attach: (send: Send | null) => void
+  /** A brain event it follows, as it comes. */
+  readonly heard?: (event: unknown) => void
 }
 
 /** The `Peer` service's identifier, as a requirement. */
@@ -188,49 +205,181 @@ const asksKey: Context.Service<AsksService, AsksShape> = Context.Service<AsksSer
 
 const opened = Schema.Struct({ id: Schema.String })
 
-const modelsLayer: Layer.Layer<ModelsService | AsksService | PeerService> = Layer.effectContext(
-  Effect.gen(function* making() {
-    const ready = yield* Deferred.make<Send | null>()
-    const peer: PeerShape = {
-      attach: (send) => {
-        Deferred.doneUnsafe(ready, Effect.succeed(send))
-      },
-    }
-    const ask = <A>(
-      method: string,
-      params: Readonly<Record<string, unknown>>,
-      result: Schema.Codec<A, unknown>,
-    ) =>
-      Effect.gen(function* asking() {
-        const send = yield* Deferred.await(ready).pipe(
-          Effect.timeoutOrElse({
-            duration: CONNECT_MS,
-            orElse: () => Effect.fail(new ModelError({ message: "No host connected" })),
-          }),
-        )
-        if (send === null) {
-          return yield* Effect.fail(new ModelError({ message: "The host offers none" }))
-        }
-        const raw = yield* Effect.tryPromise({
-          try: async () => await send(method, params),
-          catch: failed,
-        })
-        return yield* Schema.decodeUnknownEffect(result)(raw).pipe(Effect.mapError(failed))
-      })
-    const models: ModelsShape = {
-      decide: (input, questions, role = "decision") =>
-        ask("models/decide", { input, questions, role }, decision),
-      complete: (role, system, prompt) =>
-        ask("models/complete", { role, system, prompt }, completion),
-    }
-    const asks: AsksShape = {
-      open: (input, id) =>
-        ask("asks/open", { ask: input, ...(id !== undefined && { id }) }, opened),
-      close: (id, status) => Effect.asVoid(ask("asks/close", { id, status }, Schema.Unknown)),
-    }
-    return Context.make(modelsKey, models).pipe(Context.add(asksKey, asks), Context.add(Peer, peer))
-  }),
+/** What the host does for an extension beyond models and asks. */
+export interface HostShape {
+  /** Any request to the host, its result decoded. */
+  readonly request: <A>(
+    method: string,
+    params: Readonly<Record<string, unknown>>,
+    result: Schema.Codec<A, unknown>,
+  ) => Effect.Effect<A, ModelError>
+  /** Another extension's tool (`switch/call`), one the manifest's `reaches.calls` names. */
+  readonly call: (
+    name: string,
+    args: Readonly<Record<string, unknown>>,
+  ) => Effect.Effect<Readonly<Record<string, unknown>>, ModelError>
+  /** The user's connected accounts for a provider the manifest needs. */
+  readonly accounts: (provider: string) => Effect.Effect<readonly string[], ModelError>
+  /** A fresh token (or key) for one of them. */
+  readonly token: (provider: string, account: string) => Effect.Effect<string, ModelError>
+  /**
+   * The brain's events of `types` (exact, or a prefix ending in `*`), each handled once, in order:
+   * the last one handled is kept in `follow.json` in its folder, and following resumes after it on
+   * every new client, so a restart on either side misses none.
+   */
+  readonly follow: (
+    types: readonly string[],
+    handle: (event: Followed) => Effect.Effect<void>,
+  ) => Effect.Effect<void, ModelError>
+}
+
+/** The `Host` service's identifier, as a requirement. */
+export interface HostService {
+  readonly Host: unique symbol
+}
+
+const hostKey: Context.Service<HostService, HostShape> = Context.Service<HostService, HostShape>(
+  "switch-ext-kit/Host",
 )
+
+const followed = Schema.Struct({
+  seq: Schema.Finite,
+  id: Schema.String,
+  type: Schema.String,
+  source: Schema.String,
+  time: Schema.Finite,
+  payload: Schema.Unknown,
+})
+const decodeFollowed = Schema.decodeUnknownOption(followed)
+const accountList = Schema.Struct({
+  accounts: Schema.Array(Schema.Struct({ account: Schema.String })),
+})
+const tokenOf = Schema.Struct({ token: Schema.String })
+const record = Schema.Record(Schema.String, Schema.Unknown)
+const lastHandled = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ after: Schema.Finite })),
+)
+const FOLLOW_FILE = "follow.json"
+
+const matches = (patterns: readonly string[], type: string) =>
+  patterns.some((p) => (p.endsWith("*") ? type.startsWith(p.slice(0, -1)) : p === type))
+
+const modelsLayer: Layer.Layer<ModelsService | AsksService | HostService | PeerService> =
+  Layer.effectContext(
+    Effect.gen(function* making() {
+      const ready = yield* Deferred.make<Send | null>()
+      let current: Send | null = null
+      const handlers: {
+        readonly types: readonly string[]
+        readonly handle: (e: Followed) => Effect.Effect<void>
+      }[] = []
+      const file = path.resolve(FOLLOW_FILE)
+      let after = Option.match(
+        existsSync(file) ? lastHandled(readFileSync(file, "utf-8")) : Option.none(),
+        { onNone: () => 0, onSome: (x) => x.after },
+      )
+      const heard = yield* Queue.unbounded<Followed>()
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.gen(function* handling() {
+            const e = yield* Queue.take(heard)
+            if (e.seq <= after) {
+              return
+            }
+            for (const h of handlers) {
+              if (matches(h.types, e.type)) {
+                yield* h.handle(e)
+              }
+            }
+            after = e.seq
+            writeFileAtomic(file, JSON.stringify({ after }))
+          }),
+        ),
+      )
+      const refollow = (send: Send) => {
+        const types = [...new Set(handlers.flatMap((h) => h.types))]
+        if (types.length > 0) {
+          void send("switch/follow", { types, after }).catch(() => {
+            /* the next client follows again */
+          })
+        }
+      }
+      const peer: PeerShape = {
+        attach: (send) => {
+          current = send
+          Deferred.doneUnsafe(ready, Effect.succeed(send))
+          if (send !== null) {
+            refollow(send)
+          }
+        },
+        heard: (raw) => {
+          const e = decodeFollowed(raw)
+          if (Option.isSome(e)) {
+            Queue.offerUnsafe(heard, e.value)
+          }
+        },
+      }
+      const ask = <A>(
+        method: string,
+        params: Readonly<Record<string, unknown>>,
+        result: Schema.Codec<A, unknown>,
+      ) =>
+        Effect.gen(function* asking() {
+          const send = yield* Deferred.await(ready).pipe(
+            Effect.timeoutOrElse({
+              duration: CONNECT_MS,
+              orElse: () => Effect.fail(new ModelError({ message: "No host connected" })),
+            }),
+          )
+          const now = current ?? send
+          if (now === null) {
+            return yield* Effect.fail(new ModelError({ message: "The host offers none" }))
+          }
+          const raw = yield* Effect.tryPromise({
+            try: async () => await now(method, params),
+            catch: failed,
+          })
+          return yield* Schema.decodeUnknownEffect(result)(raw).pipe(Effect.mapError(failed))
+        })
+      const models: ModelsShape = {
+        decide: (input, questions, role = "decision") =>
+          ask("models/decide", { input, questions, role }, decision),
+        complete: (role, system, prompt) =>
+          ask("models/complete", { role, system, prompt }, completion),
+      }
+      const asks: AsksShape = {
+        open: (input, id) =>
+          ask("asks/open", { ask: input, ...(id !== undefined && { id }) }, opened),
+        close: (id, status) => Effect.asVoid(ask("asks/close", { id, status }, Schema.Unknown)),
+      }
+      const host: HostShape = {
+        request: ask,
+        call: (name, args) => ask("switch/call", { name, arguments: args }, record),
+        accounts: (provider) =>
+          Effect.map(ask("connections/list", { provider }, accountList), (r) =>
+            r.accounts.map((a) => a.account),
+          ),
+        token: (provider, account) =>
+          Effect.map(ask("connections/token", { provider, account }, tokenOf), (t) => t.token),
+        follow: (types, handle) =>
+          Effect.gen(function* following() {
+            handlers.push({ types, handle })
+            const all = [...new Set(handlers.flatMap((h) => h.types))]
+            yield* ask("switch/follow", { types: all, after }, Schema.Unknown)
+          }),
+      }
+      return Context.make(modelsKey, models).pipe(
+        Context.add(asksKey, asks),
+        Context.add(hostKey, host),
+        Context.add(Peer, peer),
+      )
+    }),
+  )
+
+/** The host's other services (calls, connections, follows): provided by `Models.layer`. */
+export const Host: Context.Service<HostService, HostShape> & {
+  readonly layer: typeof modelsLayer
+} = Object.assign(hostKey, { layer: modelsLayer })
 
 /** Action items through the host: provided by `Models.layer`, which `serve` connects. */
 export const Asks: Context.Service<AsksService, AsksShape> & {

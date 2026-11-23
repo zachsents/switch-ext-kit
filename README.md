@@ -146,6 +146,22 @@ Switch installs it from a git URL or package name: `extensions_install`, or Exte
 monorepo folder is installed at a commit from the core machine's `~/.switch/extensions.json`
 (`{ "source": "github:<owner>/<repo>#<commit>", "path": "<folder>" }`), packed from that folder.
 
+## The host
+
+`Host` (provided by `Models.layer`) is the rest an extension asks of the core: `call(name, args)`
+another extension's tool (named in `reaches.calls`), `accounts(provider)` and `token(provider,
+account)` for a connection it needs, `request` for anything else, and `follow(types, handle)` the
+brain's events (named in `reaches.follows`): each handled once, in order, resuming after the last
+one handled (`follow.json` in its folder) on every new client.
+
+## Ported appendages
+
+An extension ported from a Switchboard appendage emits what the shim made of its events:
+`defineRecord("<extension>.<name>", { kind, stream })` is a version 1 type whose payload is the
+record (`kind`, `stream`, `data` and the envelope), and `.record(data, { id, stream, about, refs,
+importance, sender, message, eventId, at })` one occurrence, its id the record's own. Its state stays
+where it was, `home/` in its folder (the shim's `SB_HOME`).
+
 ## Session connections
 
 A session need declares `session: { signIn: "sign_in", status: "connection_status" }`. Both tools take
