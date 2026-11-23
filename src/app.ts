@@ -542,6 +542,13 @@ const toResult = (value: unknown): CallToolResult => {
     : { content: [{ type: "text", text }] }
 }
 
+/** What a tool that failed answers. */
+const failed = (failure: unknown) =>
+  Effect.succeed<CallToolResult>({
+    content: [{ type: "text", text: describe(failure) }],
+    isError: true,
+  })
+
 /** A call made once, again: it ran, or was cut off partway and isn't run again, as it may have acted. */
 const again = (name: string, finished: boolean): CallToolResult =>
   finished
@@ -656,12 +663,7 @@ export const serve: <R>(
             }),
           ),
           Effect.map(toResult),
-          Effect.catch((error) =>
-            Effect.succeed<CallToolResult>({
-              content: [{ type: "text", text: describe(error) }],
-              isError: true,
-            }),
-          ),
+          Effect.catch(failed),
         )
         const id = Option.getOrNull(onceOf(meta))?.[ONCE] ?? null
         if (id === null) {
