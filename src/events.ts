@@ -60,9 +60,22 @@ const TaggedRefusal = Schema.TaggedError
 
 const RejectedBase: Schema.Class<
   Rejected,
-  Schema.TaggedStruct<"Rejected", { readonly reason: Schema.String }>,
+  Schema.TaggedStruct<
+    "Rejected",
+    {
+      readonly reason: Schema.String
+      readonly check: Schema.optionalKey<Schema.Boolean>
+    }
+  >,
   Cause.YieldableError
-> = TaggedRefusal<Rejected>()("Rejected", { reason: Schema.String })
+> = TaggedRefusal<Rejected>()("Rejected", {
+  reason: Schema.String,
+  check: Schema.optionalKey(Schema.Boolean),
+})
 
-/** Something refused: a bad payload, an unknown type, or a decision that said no. */
+/**
+ * Something refused: a bad payload, an unknown type, or a decision that said no. `check`: a check
+ * said no to what the caller sent, so the tool worked; its answer is marked `REFUSED`, which no one
+ * counts as the extension failing.
+ */
 export class Rejected extends RejectedBase {}

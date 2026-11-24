@@ -6,6 +6,7 @@ export {
   Caller,
   CALLER,
   ONCE,
+  REFUSED,
   CONNECTIONS,
   REACHES,
   defineApp,

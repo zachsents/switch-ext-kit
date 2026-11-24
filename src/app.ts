@@ -91,6 +91,12 @@ const progressTokenOf = Schema.decodeUnknownOption(
 export const ONCE = "ax.switch/once"
 const onceOf = Schema.decodeUnknownOption(Schema.Struct({ [ONCE]: Schema.String }))
 
+/**
+ * A tool's answer that's a check's refusal (`Rejected` with `check`), in its `_meta`: an error the
+ * caller fixes, never a sign the extension is failing.
+ */
+export const REFUSED = "ax.switch/refused"
+
 /** A widget's descriptor, in its `ui://` resource's `resources/list` entry. */
 export const WIDGET = "ax.switch/widget"
 /** What a widget's resource holds: a JSON array of A2UI messages. */
@@ -547,6 +553,7 @@ const failed = (failure: unknown) =>
   Effect.succeed<CallToolResult>({
     content: [{ type: "text", text: describe(failure) }],
     isError: true,
+    ...(failure instanceof Rejected && failure.check === true && { _meta: { [REFUSED]: true } }),
   })
 
 /** A call made once, again: it ran, or was cut off partway and isn't run again, as it may have acted. */
