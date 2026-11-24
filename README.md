@@ -1,3 +1,5 @@
+**Moved to [zachsents/switch](https://github.com/zachsents/switch/tree/main/packages/kit)**, and published on npm as [`switch-ext-kit`](https://www.npmjs.com/package/switch-ext-kit). This repo is archived.
+
 # switch-ext-kit
 
 The convention for Switch extensions: an extension's tools (MCP tools), events (MCP Events, with an Effect
